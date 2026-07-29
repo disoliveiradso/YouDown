@@ -159,14 +159,6 @@ async function fetchYouTubeEmbedInfo(videoId: string, originalUrl: string) {
             subtitles: [],
             original_url: originalUrl
           };
-        } else {
-          return {
-            title: videoDetails.title || 'Vídeo do YouTube',
-            thumbnail: videoDetails.thumbnail?.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-            duration: durationSecs,
-            uploader: videoDetails.author || 'Canal do YouTube',
-            views: videoDetails.viewCount ? parseInt(videoDetails.viewCount) : 0
-          }
         }
       }
     }
@@ -267,7 +259,81 @@ export async function POST(request: Request) {
       embedMetadata = await fetchYouTubeEmbedInfo(videoId, url);
     }
 
-    // Try yt-dlp first with iOS/mWeb client to bypass YouTube antibot checks
+    // 1. Primary Extractor: ytdl-core (Native Node.js for true 4K formats & duration)
+    try {
+      const ytdlInfo = await ytdl.getInfo(url);
+      if (ytdlInfo && ytdlInfo.formats.length > 0) {
+        const videoFormats: any[] = [];
+        const audioFormats: any[] = [];
+        const seenH = new Set<number>();
+        const seenA = new Set<number>();
+        
+        for (const fmt of ytdlInfo.formats) {
+          const h = fmt.height || (fmt.qualityLabel ? parseInt(fmt.qualityLabel) : 0);
+          if (h && h >= 144 && !seenH.has(h)) {
+            seenH.add(h);
+            let q = fmt.qualityLabel || `${h}p`;
+            if (h >= 2160) q = `${h}p (4K Ultra HD)`;
+            else if (h >= 1440) q = `${h}p (2K Quad HD)`;
+            else if (h >= 1080) q = `${h}p HD`;
+
+            videoFormats.push({
+              format_id: `yt-${h}`,
+              quality: q,
+              height: h,
+              ext: fmt.container || 'mp4',
+              filesize: parseInt(fmt.contentLength || '0'),
+              has_audio: fmt.hasAudio,
+              url: fmt.url || ''
+            });
+          }
+
+          if (fmt.audioBitrate && !fmt.hasVideo) {
+            const abr = fmt.audioBitrate;
+            if (!seenA.has(abr)) {
+              seenA.add(abr);
+              let qText = `${abr} kbps`;
+              if (abr >= 256) qText += ' (Alta Qualidade)';
+              else if (abr >= 128) qText += ' (Padrão)';
+
+              audioFormats.push({
+                format_id: `audio-${abr}`,
+                quality: qText,
+                ext: fmt.container || 'mp3',
+                filesize: parseInt(fmt.contentLength || '0'),
+                url: fmt.url || ''
+              });
+            }
+          }
+        }
+
+        videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
+        audioFormats.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+
+        let dur = parseInt(ytdlInfo.videoDetails.lengthSeconds) || 0;
+
+        if (videoFormats.length > 0) {
+          return NextResponse.json({
+            title: ytdlInfo.videoDetails.title || 'Vídeo do YouTube',
+            thumbnail: ytdlInfo.videoDetails.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            duration: dur,
+            uploader: ytdlInfo.videoDetails.author?.name || 'YouTube',
+            views: parseInt(ytdlInfo.videoDetails.viewCount) || 0,
+            video_formats: videoFormats,
+            audio_formats: audioFormats.length > 0 ? audioFormats : [
+              { format_id: 'audio-320', quality: '320 kbps (Alta Qualidade)', ext: 'mp3', filesize: 0, url: '' },
+              { format_id: 'audio-128', quality: '128 kbps (Padrão)', ext: 'mp3', filesize: 0, url: '' }
+            ],
+            subtitles: [],
+            original_url: url
+          });
+        }
+      }
+    } catch (ytdlErr) {
+      console.error("ytdl-core primary failed, falling back to yt-dlp:", ytdlErr);
+    }
+
+    // 2. Fallback to yt-dlp
     try {
       const { stdout } = await execFileAsync('yt-dlp', [
         '-j',
@@ -335,15 +401,16 @@ export async function POST(request: Request) {
 
       let duration = info.duration || 0;
       if (!duration && videoId) {
-        if (embedMetadata?.duration) duration = embedMetadata.duration;
+        const embedData = await fetchYouTubeEmbedInfo(videoId, url);
+        if (embedData?.duration) duration = embedData.duration;
       }
 
       return NextResponse.json({
-        title: info.title || embedMetadata?.title || 'Sem título',
-        thumbnail: info.thumbnail || embedMetadata?.thumbnail || '',
+        title: info.title || 'Sem título',
+        thumbnail: info.thumbnail || '',
         duration: duration,
-        uploader: info.uploader || embedMetadata?.uploader || 'Desconhecido',
-        views: info.view_count || embedMetadata?.views || 0,
+        uploader: info.uploader || 'Desconhecido',
+        views: info.view_count || 0,
         video_formats: videoFormats.slice(0, 10),
         audio_formats: audioFormats.slice(0, 5),
         subtitles: [],
@@ -390,7 +457,7 @@ export async function POST(request: Request) {
                     quality: `${abr} kbps (MP3)`,
                     ext: 'mp3',
                     filesize: parseInt(fmt.contentLength || '0'),
-                    url: fmt.url || ''
+                    url: fmt.container || 'mp3',
                   });
                 }
               }
@@ -417,8 +484,9 @@ export async function POST(request: Request) {
         } catch(e) {}
 
         // Fallback 2: YouTube Embed HTML with bracket JSON parser
-        if (embedMetadata && embedMetadata.video_formats && embedMetadata.video_formats.length > 0) {
-          return NextResponse.json(embedMetadata);
+        const embedData = await fetchYouTubeEmbedInfo(videoId, url);
+        if (embedData && embedData.video_formats.length > 0) {
+          return NextResponse.json(embedData);
         }
 
         const pipedData = await fetchPipedInfo(videoId, url);
