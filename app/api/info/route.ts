@@ -17,7 +17,7 @@ async function fetchYouTubeEmbedInfo(videoId: string, originalUrl: string) {
   try {
     const res = await fetch(`https://www.youtube.com/embed/${videoId}`, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1',
         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
       },
       signal: AbortSignal.timeout(6000)
@@ -114,6 +114,79 @@ async function fetchYouTubeEmbedInfo(videoId: string, originalUrl: string) {
   return null;
 }
 
+// Fetch Piped API metadata
+async function fetchPipedInfo(videoId: string, originalUrl: string) {
+  const pipedInstances = [
+    `https://pipedapi.kavin.rocks/streams/${videoId}`,
+    `https://api.piped.private.coffee/streams/${videoId}`,
+    `https://pipedapi.tokhmi.xyz/streams/${videoId}`
+  ];
+
+  for (const ep of pipedInstances) {
+    try {
+      const res = await fetch(ep, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        const videoFormats: any[] = [];
+        const audioFormats: any[] = [];
+        const seenHeights = new Set();
+        const seenBitrates = new Set();
+
+        for (const fmt of (data.videoStreams || [])) {
+          const h = fmt.height || (fmt.quality ? parseInt(fmt.quality) : 0);
+          if (h && h >= 144 && !seenHeights.has(h)) {
+            seenHeights.add(h);
+            let q = fmt.quality || `${h}p`;
+            if (h >= 2160) q = `${h}p (4K Ultra HD)`;
+            else if (h >= 1440) q = `${h}p (2K Quad HD)`;
+            else if (h >= 1080) q = `${h}p HD`;
+
+            videoFormats.push({
+              format_id: `piped-${h}`,
+              quality: q,
+              height: h,
+              ext: fmt.format || 'mp4',
+              filesize: 0,
+              has_audio: true,
+              url: fmt.url || ''
+            });
+          }
+        }
+
+        for (const fmt of (data.audioStreams || [])) {
+          const bitrate = fmt.bitrate ? Math.round(fmt.bitrate / 1000) : 128;
+          if (bitrate > 0 && !seenBitrates.has(bitrate)) {
+            seenBitrates.add(bitrate);
+            audioFormats.push({
+              format_id: `piped-audio-${bitrate}`,
+              quality: `${bitrate} kbps (${fmt.format || 'MP3'})`,
+              ext: fmt.format?.toLowerCase() || 'mp3',
+              filesize: 0,
+              url: fmt.url || ''
+            });
+          }
+        }
+
+        videoFormats.sort((a, b) => b.height - a.height);
+        audioFormats.sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
+
+        return {
+          title: data.title || 'Vídeo do YouTube',
+          thumbnail: data.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          duration: data.duration || 0,
+          uploader: data.uploader || 'Canal do YouTube',
+          views: data.views || 0,
+          video_formats: videoFormats,
+          audio_formats: audioFormats,
+          subtitles: [],
+          original_url: originalUrl
+        };
+      }
+    } catch {}
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -125,13 +198,14 @@ export async function POST(request: Request) {
 
     const videoId = extractVideoId(url);
 
-    // Try yt-dlp first
+    // Try yt-dlp first with iOS/mWeb client to bypass YouTube antibot checks
     try {
       const { stdout } = await execFileAsync('yt-dlp', [
         '-j',
         '--no-warnings',
         '--socket-timeout', '10',
         '--no-check-certificates',
+        '--extractor-args', 'youtube:player_client=ios,mweb',
         url
       ], { maxBuffer: 15 * 1024 * 1024 });
 
@@ -209,24 +283,34 @@ export async function POST(request: Request) {
         original_url: url
       });
     } catch (ytErr) {
-      // Fallback 1: YouTube Embed HTML Metadata (Real resolutions, lengthSeconds, and real audio streams)
+      // Robust Fallback Sequence when yt-dlp encounters YouTube bot check
       if (videoId) {
+        // Fallback 1: YouTube Embed HTML Player Response
         const embedData = await fetchYouTubeEmbedInfo(videoId, url);
         if (embedData && embedData.video_formats.length > 0) {
           return NextResponse.json(embedData);
         }
-      }
 
-      // Fallback 2: Invidious Instances
-      if (videoId) {
+        // Fallback 2: Piped API
+        const pipedData = await fetchPipedInfo(videoId, url);
+        if (pipedData && pipedData.video_formats.length > 0) {
+          return NextResponse.json(pipedData);
+        }
+
+        // Fallback 3: Invidious API
         const invData = await fetchInvidiousInfo(videoId, url);
-        if (invData) return NextResponse.json(invData);
+        if (invData && invData.video_formats.length > 0) {
+          return NextResponse.json(invData);
+        }
       }
 
-      throw ytErr;
+      // Friendly fallback error if all extractions fail
+      return NextResponse.json({
+        error: 'Não foi possível carregar os dados deste vídeo no momento. Por favor, tente novamente ou verifique se o vídeo é público.'
+      }, { status: 400 });
     }
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Erro ao processar vídeo' }, { status: 400 });
+    return NextResponse.json({ error: 'Erro ao processar requisição. Verifique o link e tente novamente.' }, { status: 400 });
   }
 }
 

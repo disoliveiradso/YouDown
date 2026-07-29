@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   let formatSelector = 'bestvideo+bestaudio/best';
   if (type === 'audio') {
     formatSelector = 'bestaudio/best';
-  } else if (formatId && !formatId.startsWith('inv-') && !formatId.startsWith('yt-') && !formatId.startsWith('audio-')) {
+  } else if (formatId && !formatId.startsWith('inv-') && !formatId.startsWith('yt-') && !formatId.startsWith('piped-') && !formatId.startsWith('audio-')) {
     formatSelector = `${formatId}+bestaudio/best`;
   }
 
@@ -32,6 +32,7 @@ export async function GET(request: Request) {
     '--no-warnings',
     '--no-check-certificates',
     '--socket-timeout', '30',
+    '--extractor-args', 'youtube:player_client=ios,mweb',
   ];
 
   if (type === 'audio') {
