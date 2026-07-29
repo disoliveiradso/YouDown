@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         title: info.title || 'Sem título',
         thumbnail: info.thumbnail || '',
-        duration: info.duration || 0,
+        duration: info.duration || info.duration_string || 0,
         uploader: info.uploader || 'Desconhecido',
         views: info.view_count || 0,
         video_formats: videoFormats.slice(0, 10),
