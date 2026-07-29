@@ -259,6 +259,7 @@ export async function POST(request: Request) {
         '--no-warnings',
         '--socket-timeout', '15',
         '--no-check-certificates',
+        '--extractor-args', 'youtube:player_client=ios,mweb',
         url
       ], { maxBuffer: 15 * 1024 * 1024 });
 
@@ -386,7 +387,7 @@ async function fetchInvidiousInfo(videoId: string, originalUrl: string) {
 
   for (const baseUri of instances) {
     try {
-      const res = await fetch(`${baseUri}/api/v1/videos/${videoId}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(4000) });
+      const res = await fetch(`${baseUri}/api/v1/videos/${videoId}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
       if (res.ok) {
         const data = await res.json();
         const videoFormats: any[] = [];
