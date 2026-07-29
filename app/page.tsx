@@ -107,7 +107,7 @@ export default function Home() {
       }
     } catch (err: any) {
       setError(err.message || 'Erro ao conectar ao servidor.');
-    } fontally {
+    } finally {
       setLoading(false);
     }
   };
@@ -133,6 +133,7 @@ export default function Home() {
         throw new Error(data.error || 'Falha ao processar download');
       }
 
+      // If direct url or streaming link returned
       if (data.download_url) {
         const link = document.createElement('a');
         link.href = data.download_url;
@@ -145,7 +146,7 @@ export default function Home() {
       }
     } catch (err: any) {
       alert(err.message || 'Erro ao iniciar o download.');
-    } fontally {
+    } finally {
       setDownloading(false);
     }
   };
