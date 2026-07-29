@@ -13,7 +13,7 @@ function extractVideoId(url: string): string | null {
 }
 
 // Fetch YouTube Embed metadata directly from YouTube embed page ytInitialPlayerResponse
-async function fetchYouTubeEmbedInfo(videoId: string) {
+async function fetchYouTubeEmbedInfo(videoId: string, originalUrl: string) {
   try {
     const res = await fetch(`https://www.youtube.com/embed/${videoId}`, {
       headers: {
@@ -39,39 +39,61 @@ async function fetchYouTubeEmbedInfo(videoId: string) {
         const formatsList = [...(streamingData.formats || []), ...(streamingData.adaptiveFormats || [])];
 
         const videoFormats: any[] = [];
+        const audioFormats: any[] = [];
         const seenHeights = new Set<number>();
+        const seenBitrates = new Set<number>();
 
         for (const fmt of formatsList) {
-          const height = fmt.height || (fmt.qualityLabel ? parseInt(fmt.qualityLabel) : 0);
-          if (height && height >= 144 && !seenHeights.has(height)) {
-            seenHeights.add(height);
-            let qualityLabel = fmt.qualityLabel || `${height}p`;
-            if (height >= 2160) qualityLabel = `${height}p (4K Ultra HD)`;
-            else if (height >= 1440) qualityLabel = `${height}p (2K Quad HD)`;
-            else if (height >= 1080) qualityLabel = `${height}p HD`;
+          const mime = fmt.mimeType || '';
+          const isVideo = mime.includes('video') || fmt.height;
+          const isAudio = mime.includes('audio') && !fmt.height;
 
-            videoFormats.push({
-              format_id: `yt-${height}`,
-              quality: qualityLabel,
-              height: height,
-              ext: fmt.mimeType?.includes('webm') ? 'webm' : 'mp4',
-              filesize: fmt.contentLength ? parseInt(fmt.contentLength) : 0,
-              has_audio: true,
-              url: fmt.url || ''
-            });
+          // Video formats extraction
+          if (isVideo) {
+            const height = fmt.height || (fmt.qualityLabel ? parseInt(fmt.qualityLabel) : 0);
+            if (height && height >= 144 && !seenHeights.has(height)) {
+              seenHeights.add(height);
+              let qualityLabel = fmt.qualityLabel || `${height}p`;
+              if (height >= 2160) qualityLabel = `${height}p (4K Ultra HD)`;
+              else if (height >= 1440) qualityLabel = `${height}p (2K Quad HD)`;
+              else if (height >= 1080) qualityLabel = `${height}p HD`;
+
+              videoFormats.push({
+                format_id: `yt-${height}`,
+                quality: qualityLabel,
+                height: height,
+                ext: mime.includes('webm') ? 'webm' : 'mp4',
+                filesize: fmt.contentLength ? parseInt(fmt.contentLength) : 0,
+                has_audio: true,
+                url: fmt.url || ''
+              });
+            }
+          }
+
+          // Audio formats extraction
+          if (isAudio) {
+            const bitrateKbps = fmt.bitrate ? Math.round(fmt.bitrate / 1000) : (fmt.audioBitrate || 128);
+            if (bitrateKbps > 0 && !seenBitrates.has(bitrateKbps)) {
+              seenBitrates.add(bitrateKbps);
+              const ext = mime.includes('mp4') || mime.includes('m4a') ? 'm4a' : 'mp3';
+              
+              let qualityText = `${bitrateKbps} kbps`;
+              if (bitrateKbps >= 256) qualityText += ' (Alta Qualidade)';
+              else if (bitrateKbps >= 128) qualityText += ' (Padrão)';
+
+              audioFormats.push({
+                format_id: `yt-audio-${bitrateKbps}`,
+                quality: qualityText,
+                ext: ext,
+                filesize: fmt.contentLength ? parseInt(fmt.contentLength) : 0,
+                url: fmt.url || ''
+              });
+            }
           }
         }
 
         videoFormats.sort((a, b) => b.height - a.height);
-
-        // Comprehensive audio formats
-        const audioFormats = [
-          { format_id: 'audio-320', quality: '320 kbps (MP3 - Máxima Qualidade)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-256', quality: '256 kbps (M4A / AAC)', ext: 'm4a', filesize: 0, url: '' },
-          { format_id: 'audio-192', quality: '192 kbps (MP3 - Alta Qualidade)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-128', quality: '128 kbps (MP3 - Padrão)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-64', quality: '64 kbps (Opus / WebM)', ext: 'opus', filesize: 0, url: '' },
-        ];
+        audioFormats.sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
 
         const durationSecs = videoDetails.lengthSeconds ? parseInt(videoDetails.lengthSeconds, 10) : 0;
 
@@ -84,7 +106,7 @@ async function fetchYouTubeEmbedInfo(videoId: string) {
           video_formats: videoFormats,
           audio_formats: audioFormats,
           subtitles: [],
-          original_url: `https://www.youtube.com/watch?v=${videoId}`
+          original_url: originalUrl
         };
       }
     }
@@ -153,11 +175,11 @@ export async function POST(request: Request) {
           const abr = f.abr || f.tbr || 128;
           const abrInt = Math.round(abr);
           const key = `${ext}-${abrInt}`;
-          if (!seenAudio.has(key)) {
+          if (abrInt > 0 && !seenAudio.has(key)) {
             seenAudio.add(key);
             audioFormats.push({
               format_id: f.format_id,
-              quality: `${abrInt} kbps`,
+              quality: `${abrInt} kbps (${ext.toUpperCase()})`,
               ext: ext,
               filesize: filesize,
               url: f.url
@@ -167,23 +189,12 @@ export async function POST(request: Request) {
       }
 
       videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
+      audioFormats.sort((a, b) => (parseInt(b.quality) || 0) - (parseInt(a.quality) || 0));
 
       let duration = info.duration || 0;
       if (!duration && videoId) {
-        const embedData = await fetchYouTubeEmbedInfo(videoId);
+        const embedData = await fetchYouTubeEmbedInfo(videoId, url);
         if (embedData?.duration) duration = embedData.duration;
-      }
-
-      // Add standard audio qualities if yt-dlp extracted few
-      if (audioFormats.length < 3) {
-        audioFormats.length = 0;
-        audioFormats.push(
-          { format_id: 'audio-320', quality: '320 kbps (MP3 - Máxima Qualidade)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-256', quality: '256 kbps (M4A / AAC)', ext: 'm4a', filesize: 0, url: '' },
-          { format_id: 'audio-192', quality: '192 kbps (MP3 - Alta Qualidade)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-128', quality: '128 kbps (MP3 - Padrão)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-64', quality: '64 kbps (Opus / WebM)', ext: 'opus', filesize: 0, url: '' }
-        );
       }
 
       return NextResponse.json({
@@ -198,9 +209,9 @@ export async function POST(request: Request) {
         original_url: url
       });
     } catch (ytErr) {
-      // Fallback 1: YouTube Embed HTML Metadata (Real resolutions & lengthSeconds)
+      // Fallback 1: YouTube Embed HTML Metadata (Real resolutions, lengthSeconds, and real audio streams)
       if (videoId) {
-        const embedData = await fetchYouTubeEmbedInfo(videoId);
+        const embedData = await fetchYouTubeEmbedInfo(videoId, url);
         if (embedData && embedData.video_formats.length > 0) {
           return NextResponse.json(embedData);
         }
@@ -232,7 +243,9 @@ async function fetchInvidiousInfo(videoId: string, originalUrl: string) {
       if (res.ok) {
         const data = await res.json();
         const videoFormats: any[] = [];
+        const audioFormats: any[] = [];
         const seenH = new Set();
+        const seenA = new Set();
 
         const allFmts = [...(data.adaptiveFormats || []), ...(data.formatStreams || [])];
 
@@ -255,17 +268,23 @@ async function fetchInvidiousInfo(videoId: string, originalUrl: string) {
               url: fmt.url || ''
             });
           }
+
+          if (fmt.type?.includes('audio')) {
+            const bitrateKbps = fmt.bitrate ? Math.round(parseInt(fmt.bitrate) / 1000) : 128;
+            if (!seenA.has(bitrateKbps)) {
+              seenA.add(bitrateKbps);
+              audioFormats.push({
+                format_id: `inv-audio-${bitrateKbps}`,
+                quality: `${bitrateKbps} kbps (Áudio)`,
+                ext: fmt.container || 'mp3',
+                filesize: 0,
+                url: fmt.url || ''
+              });
+            }
+          }
         }
 
         videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
-
-        const audioFormats = [
-          { format_id: 'audio-320', quality: '320 kbps (MP3 - Máxima Qualidade)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-256', quality: '256 kbps (M4A / AAC)', ext: 'm4a', filesize: 0, url: '' },
-          { format_id: 'audio-192', quality: '192 kbps (MP3 - Alta Qualidade)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-128', quality: '128 kbps (MP3 - Padrão)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-64', quality: '64 kbps (Opus / WebM)', ext: 'opus', filesize: 0, url: '' }
-        ];
 
         return {
           title: data.title || 'Vídeo do YouTube',
