@@ -83,17 +83,23 @@ export default function Home() {
   };
 
   const formatDuration = (val: number | string) => {
-    if (!val) return '';
-    if (typeof val === 'string' && val.includes(':')) return val;
+    if (!val) return '00:00';
+    if (typeof val === 'string' && val.includes(':')) {
+      const parts = val.split(':');
+      if (parts.length === 2) {
+        return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+      }
+      return val;
+    }
     const seconds = typeof val === 'string' ? parseFloat(val) : val;
-    if (isNaN(seconds) || seconds <= 0) return '';
+    if (isNaN(seconds) || seconds <= 0) return '00:00';
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
     if (hrs > 0) {
       return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
     }
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
   const handleFetchInfo = async (e: React.FormEvent) => {
@@ -462,12 +468,10 @@ export default function Home() {
                   alt={videoInfo.title}
                   className="w-full h-full object-cover"
                 />
-                {formatDuration(videoInfo.duration) && (
-                  <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[11px] font-mono text-white flex items-center space-x-1">
-                    <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
-                    <span>{formatDuration(videoInfo.duration)}</span>
-                  </div>
-                )}
+                <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[11px] font-mono text-white flex items-center space-x-1 border border-white/10 shadow-md">
+                  <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
+                  <span>{formatDuration(videoInfo.duration)}</span>
+                </div>
               </div>
 
               <div className="space-y-2 flex-1 min-w-0">
@@ -626,7 +630,7 @@ export default function Home() {
 
             {/* Texto discreto com menos destaque */}
             <span className="text-[11px] text-slate-500 font-medium tracking-wide uppercase whitespace-nowrap">
-              Tecnologias utilizadas no site:
+              Repositórios utilizados no site:
             </span>
 
             {/* 3 Repositórios Utilizados */}
