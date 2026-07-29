@@ -259,7 +259,6 @@ export async function POST(request: Request) {
         '--no-warnings',
         '--socket-timeout', '15',
         '--no-check-certificates',
-        '--extractor-args', 'youtube:player_client=default,ios',
         url
       ], { maxBuffer: 15 * 1024 * 1024 });
 
@@ -366,15 +365,28 @@ export async function POST(request: Request) {
 }
 
 async function fetchInvidiousInfo(videoId: string, originalUrl: string) {
-  const invidiousEndpoints = [
-    `https://inv.itissimple.org/api/v1/videos/${videoId}`,
-    `https://invidious.nerdvpn.de/api/v1/videos/${videoId}`,
-    `https://yewtu.be/api/v1/videos/${videoId}`
+  let instances: string[] = [
+    `https://inv.itissimple.org`,
+    `https://invidious.nerdvpn.de`,
+    `https://yewtu.be`,
+    `https://invidious.jing.rocks`,
+    `https://vid.puffyan.us`
   ];
 
-  for (const ep of invidiousEndpoints) {
+  try {
+    const listRes = await fetch("https://api.invidious.io/instances.json?sort_by=health", { signal: AbortSignal.timeout(3000) });
+    if (listRes.ok) {
+      const data = await listRes.json();
+      const active = data.filter((i: any) => i[1].type === "https" && i[1].api === true).map((i: any) => i[1].uri);
+      if (active.length > 0) {
+        instances = [...active.slice(0, 8), ...instances];
+      }
+    }
+  } catch { }
+
+  for (const baseUri of instances) {
     try {
-      const res = await fetch(ep, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(4000) });
+      const res = await fetch(`${baseUri}/api/v1/videos/${videoId}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(4000) });
       if (res.ok) {
         const data = await res.json();
         const videoFormats: any[] = [];
@@ -420,12 +432,15 @@ async function fetchInvidiousInfo(videoId: string, originalUrl: string) {
         }
 
         videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
+        
+        let dur = data.lengthSeconds || 0;
+        if (!dur && data.published) dur = 0; // Just in case, fallback to what we have
 
         if (videoFormats.length > 0) {
           return {
             title: data.title || 'Vídeo do YouTube',
             thumbnail: data.videoThumbnails?.[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-            duration: data.lengthSeconds || 0,
+            duration: dur,
             uploader: data.author || 'Canal do YouTube',
             views: data.viewCount || 0,
             video_formats: videoFormats,
