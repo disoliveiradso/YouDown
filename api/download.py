@@ -53,16 +53,23 @@ class handler(BaseHTTPRequestHandler):
         else:
             format_selector = 'bestvideo+bestaudio/best' if download_type == 'video' else 'bestaudio/best'
 
+        youtube_args = ['client=ANDROID,IOS,TV']
+        if os.environ.get('POT_PROVIDER_URL'):
+            youtube_args.append(f"po_token=web+{os.environ.get('POT_PROVIDER_URL')}")
+
+        extractor_args = {
+            'youtube': youtube_args
+        }
+
+        if os.environ.get('BGUTIL_BASE_URL'):
+            extractor_args['youtubepot-bgutilhttp'] = [f"base_url={os.environ.get('BGUTIL_BASE_URL')}"]
+
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'format': format_selector,
             'skip_download': True,
-            'extractor_args': {
-                'youtube': [
-                    'client=ANDROID,IOS,TV'
-                ]
-            },
+            'extractor_args': extractor_args,
         }
 
         if cookie_file_path:

@@ -46,17 +46,24 @@ class handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
+        youtube_args = ['client=ANDROID,IOS,TV']
+        if os.environ.get('POT_PROVIDER_URL'):
+            youtube_args.append(f"po_token=web+{os.environ.get('POT_PROVIDER_URL')}")
+
+        extractor_args = {
+            'youtube': youtube_args
+        }
+
+        if os.environ.get('BGUTIL_BASE_URL'):
+            extractor_args['youtubepot-bgutilhttp'] = [f"base_url={os.environ.get('BGUTIL_BASE_URL')}"]
+
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
             'skip_download': True,
             'socket_timeout': 10,
-            'extractor_args': {
-                'youtube': [
-                    'client=ANDROID,IOS,TV'
-                ]
-            },
+            'extractor_args': extractor_args,
         }
         
         if cookie_file_path:
