@@ -42,6 +42,12 @@ class handler(BaseHTTPRequestHandler):
             'extract_flat': False,
             'skip_download': True,
             'socket_timeout': 10,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'mweb', 'android'],
+                    'player_skip': ['webpage', 'configs', 'js']
+                }
+            },
         }
 
         try:

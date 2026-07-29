@@ -36,6 +36,7 @@ class handler(BaseHTTPRequestHandler):
             self._respond_json({'error': 'yt-dlp não disponível no servidor'}, status=500)
             return
 
+        # Configure yt-dlp format string
         if format_id:
             format_selector = format_id
         else:
@@ -46,6 +47,12 @@ class handler(BaseHTTPRequestHandler):
             'no_warnings': True,
             'format': format_selector,
             'skip_download': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'mweb', 'android'],
+                    'player_skip': ['webpage', 'configs', 'js']
+                }
+            },
         }
 
         try:
@@ -55,10 +62,12 @@ class handler(BaseHTTPRequestHandler):
                 if 'entries' in info:
                     info = info['entries'][0]
 
+                # Get direct download URL
                 download_url = info.get('url')
                 title = info.get('title', 'video')
                 ext = info.get('ext', 'mp4' if download_type == 'video' else 'mp3')
 
+                # If single format URL not found, check requested format
                 if not download_url and 'formats' in info:
                     for f in info['formats']:
                         if f.get('format_id') == format_id:
@@ -72,6 +81,7 @@ class handler(BaseHTTPRequestHandler):
                     self._respond_json({'error': 'Não foi possível obter o link de download direto'}, status=404)
                     return
 
+                # Clean filename
                 clean_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
 
                 response_data = {
