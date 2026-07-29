@@ -630,7 +630,7 @@ export default function Home() {
 
             {/* Texto discreto com menos destaque */}
             <span className="text-[11px] text-slate-500 font-medium tracking-wide uppercase whitespace-nowrap">
-              Repositórios utilizados no site:
+              Repositórios utilizados :
             </span>
 
             {/* 3 Repositórios Utilizados */}
