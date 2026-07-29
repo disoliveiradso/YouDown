@@ -8,71 +8,88 @@ export const runtime = 'nodejs';
 const execFileAsync = promisify(execFile);
 
 function extractVideoId(url: string): string | null {
-  const match = url.match(/(?:v=|\/([0-9A-Za-z_-]{11}).*|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})/);
+  const match = url.match(/(?:v=|\/([0-9A-Za-z_-]{11}).*|embed\/|youtu\.be\/|shorts\/)([0-9A-Za-z_-]{11})/);
   return match ? (match[1] || match[2]) : null;
 }
 
-async function fetchYouTubeDuration(videoId: string): Promise<number> {
-  if (!videoId) return 0;
-  
-  // Strategy 1: YouTube Embed Page (Always allowed on cloud IPs & contains lengthSeconds)
+// Fetch YouTube Embed metadata directly from YouTube embed page ytInitialPlayerResponse
+async function fetchYouTubeEmbedInfo(videoId: string) {
   try {
     const res = await fetch(`https://www.youtube.com/embed/${videoId}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
       },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(6000)
     });
+
     if (res.ok) {
       const html = await res.text();
-      // Match "lengthSeconds":"4952" inside ytInitialPlayerResponse
-      const matchLength = html.match(/"lengthSeconds":"(\d+)"/);
-      if (matchLength && matchLength[1]) {
-        const secs = parseInt(matchLength[1], 10);
-        if (secs > 0) return secs;
+      const matchPlayerResponse = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
+      let playerResponse: any = null;
+      if (matchPlayerResponse && matchPlayerResponse[1]) {
+        try {
+          playerResponse = JSON.parse(matchPlayerResponse[1]);
+        } catch {}
       }
-      // Match "approxDurationMs":"4952000"
-      const matchMs = html.match(/"approxDurationMs":"(\d+)"/);
-      if (matchMs && matchMs[1]) {
-        const secs = Math.floor(parseInt(matchMs[1], 10) / 1000);
-        if (secs > 0) return secs;
-      }
-    }
-  } catch {}
 
-  // Strategy 2: Piped API Streams Endpoint
-  try {
-    const pipedRes = await fetch(`https://pipedapi.kavin.rocks/streams/${videoId}`, {
-      signal: AbortSignal.timeout(4000)
-    });
-    if (pipedRes.ok) {
-      const data = await pipedRes.json();
-      if (data.duration && Number(data.duration) > 0) {
-        return Number(data.duration);
-      }
-    }
-  } catch {}
+      if (playerResponse) {
+        const videoDetails = playerResponse.videoDetails || {};
+        const streamingData = playerResponse.streamingData || {};
+        const formatsList = [...(streamingData.formats || []), ...(streamingData.adaptiveFormats || [])];
 
-  // Strategy 3: Invidious API
-  const invidiousEndpoints = [
-    `https://inv.itissimple.org/api/v1/videos/${videoId}`,
-    `https://invidious.nerdvpn.de/api/v1/videos/${videoId}`,
-    `https://yewtu.be/api/v1/videos/${videoId}`
-  ];
-  for (const ep of invidiousEndpoints) {
-    try {
-      const invRes = await fetch(ep, { signal: AbortSignal.timeout(3000) });
-      if (invRes.ok) {
-        const data = await invRes.json();
-        if (data.lengthSeconds && Number(data.lengthSeconds) > 0) {
-          return Number(data.lengthSeconds);
+        const videoFormats: any[] = [];
+        const seenHeights = new Set<number>();
+
+        for (const fmt of formatsList) {
+          const height = fmt.height || (fmt.qualityLabel ? parseInt(fmt.qualityLabel) : 0);
+          if (height && height >= 144 && !seenHeights.has(height)) {
+            seenHeights.add(height);
+            let qualityLabel = fmt.qualityLabel || `${height}p`;
+            if (height >= 2160) qualityLabel = `${height}p (4K Ultra HD)`;
+            else if (height >= 1440) qualityLabel = `${height}p (2K Quad HD)`;
+            else if (height >= 1080) qualityLabel = `${height}p HD`;
+
+            videoFormats.push({
+              format_id: `yt-${height}`,
+              quality: qualityLabel,
+              height: height,
+              ext: fmt.mimeType?.includes('webm') ? 'webm' : 'mp4',
+              filesize: fmt.contentLength ? parseInt(fmt.contentLength) : 0,
+              has_audio: true,
+              url: fmt.url || ''
+            });
+          }
         }
-      }
-    } catch {}
-  }
 
-  return 0;
+        videoFormats.sort((a, b) => b.height - a.height);
+
+        // Comprehensive audio formats
+        const audioFormats = [
+          { format_id: 'audio-320', quality: '320 kbps (MP3 - Máxima Qualidade)', ext: 'mp3', filesize: 0, url: '' },
+          { format_id: 'audio-256', quality: '256 kbps (M4A / AAC)', ext: 'm4a', filesize: 0, url: '' },
+          { format_id: 'audio-192', quality: '192 kbps (MP3 - Alta Qualidade)', ext: 'mp3', filesize: 0, url: '' },
+          { format_id: 'audio-128', quality: '128 kbps (MP3 - Padrão)', ext: 'mp3', filesize: 0, url: '' },
+          { format_id: 'audio-64', quality: '64 kbps (Opus / WebM)', ext: 'opus', filesize: 0, url: '' },
+        ];
+
+        const durationSecs = videoDetails.lengthSeconds ? parseInt(videoDetails.lengthSeconds, 10) : 0;
+
+        return {
+          title: videoDetails.title || 'Vídeo do YouTube',
+          thumbnail: videoDetails.thumbnail?.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          duration: durationSecs,
+          uploader: videoDetails.author || 'Canal do YouTube',
+          views: videoDetails.viewCount ? parseInt(videoDetails.viewCount) : 0,
+          video_formats: videoFormats,
+          audio_formats: audioFormats,
+          subtitles: [],
+          original_url: `https://www.youtube.com/watch?v=${videoId}`
+        };
+      }
+    }
+  } catch {}
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -92,7 +109,7 @@ export async function POST(request: Request) {
         '-j',
         '--no-warnings',
         '--socket-timeout', '10',
-        '--extractor-args', 'youtube:client=WEB,IOS,ANDROID,TV',
+        '--no-check-certificates',
         url
       ], { maxBuffer: 15 * 1024 * 1024 });
 
@@ -112,13 +129,13 @@ export async function POST(request: Request) {
         if (vcodec !== 'none') {
           const height = f.height;
           const fps = f.fps || '';
-          if (height && !seenResolutions.has(height)) {
+          if (height && height >= 144 && !seenResolutions.has(height)) {
             seenResolutions.add(height);
             let qualityLabel = `${height}p`;
             if (height >= 2160) qualityLabel += ' (4K Ultra HD)';
             else if (height >= 1440) qualityLabel += ' (2K Quad HD)';
             else if (height >= 1080) qualityLabel += ' HD';
-            else if (fps && Number(fps) >= 50) qualityLabel += fps;
+            else if (fps && Number(fps) >= 50) qualityLabel += `${fps}fps`;
 
             videoFormats.push({
               format_id: f.format_id,
@@ -151,9 +168,22 @@ export async function POST(request: Request) {
 
       videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
 
-      let duration = info.duration || info.duration_string || 0;
-      if ((!duration || duration === 0) && videoId) {
-        duration = await fetchYouTubeDuration(videoId);
+      let duration = info.duration || 0;
+      if (!duration && videoId) {
+        const embedData = await fetchYouTubeEmbedInfo(videoId);
+        if (embedData?.duration) duration = embedData.duration;
+      }
+
+      // Add standard audio qualities if yt-dlp extracted few
+      if (audioFormats.length < 3) {
+        audioFormats.length = 0;
+        audioFormats.push(
+          { format_id: 'audio-320', quality: '320 kbps (MP3 - Máxima Qualidade)', ext: 'mp3', filesize: 0, url: '' },
+          { format_id: 'audio-256', quality: '256 kbps (M4A / AAC)', ext: 'm4a', filesize: 0, url: '' },
+          { format_id: 'audio-192', quality: '192 kbps (MP3 - Alta Qualidade)', ext: 'mp3', filesize: 0, url: '' },
+          { format_id: 'audio-128', quality: '128 kbps (MP3 - Padrão)', ext: 'mp3', filesize: 0, url: '' },
+          { format_id: 'audio-64', quality: '64 kbps (Opus / WebM)', ext: 'opus', filesize: 0, url: '' }
+        );
       }
 
       return NextResponse.json({
@@ -168,14 +198,20 @@ export async function POST(request: Request) {
         original_url: url
       });
     } catch (ytErr) {
-      // Fallback to Invidious/Piped/oEmbed
-      const fallbackData = await fallbackMetadata(url);
-      if (fallbackData) {
-        if ((!fallbackData.duration || fallbackData.duration === 0) && videoId) {
-          fallbackData.duration = await fetchYouTubeDuration(videoId);
+      // Fallback 1: YouTube Embed HTML Metadata (Real resolutions & lengthSeconds)
+      if (videoId) {
+        const embedData = await fetchYouTubeEmbedInfo(videoId);
+        if (embedData && embedData.video_formats.length > 0) {
+          return NextResponse.json(embedData);
         }
-        return NextResponse.json(fallbackData);
       }
+
+      // Fallback 2: Invidious Instances
+      if (videoId) {
+        const invData = await fetchInvidiousInfo(videoId, url);
+        if (invData) return NextResponse.json(invData);
+      }
+
       throw ytErr;
     }
   } catch (err: any) {
@@ -183,30 +219,26 @@ export async function POST(request: Request) {
   }
 }
 
-async function fallbackMetadata(url: string) {
-  const videoId = extractVideoId(url);
-  if (!videoId) return null;
-
-  const invidiousInstances = [
+async function fetchInvidiousInfo(videoId: string, originalUrl: string) {
+  const invidiousEndpoints = [
     `https://inv.itissimple.org/api/v1/videos/${videoId}`,
     `https://invidious.nerdvpn.de/api/v1/videos/${videoId}`,
     `https://yewtu.be/api/v1/videos/${videoId}`
   ];
 
-  for (const ep of invidiousInstances) {
+  for (const ep of invidiousEndpoints) {
     try {
       const res = await fetch(ep, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(4000) });
       if (res.ok) {
         const data = await res.json();
         const videoFormats: any[] = [];
-        const audioFormats: any[] = [];
         const seenH = new Set();
 
         const allFmts = [...(data.adaptiveFormats || []), ...(data.formatStreams || [])];
 
         for (const fmt of allFmts) {
           const h = fmt.height || (fmt.qualityLabel ? parseInt(fmt.qualityLabel) : 0);
-          if (h && !seenH.has(h)) {
+          if (h && h >= 144 && !seenH.has(h)) {
             seenH.add(h);
             let q = fmt.qualityLabel || `${h}p`;
             if (h >= 2160) q += ' (4K Ultra HD)';
@@ -220,73 +252,35 @@ async function fallbackMetadata(url: string) {
               ext: fmt.container || 'mp4',
               filesize: 0,
               has_audio: true,
-              url: fmt.url
+              url: fmt.url || ''
             });
-          }
-        }
-
-        for (const fmt of (data.adaptiveFormats || [])) {
-          if (fmt.type?.includes('audio')) {
-            audioFormats.push({
-              format_id: 'inv-audio',
-              quality: '320 kbps',
-              ext: 'mp3',
-              filesize: 0,
-              url: fmt.url
-            });
-            break;
           }
         }
 
         videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
 
-        let duration = data.lengthSeconds || 0;
-        if (!duration) {
-          duration = await fetchYouTubeDuration(videoId);
-        }
+        const audioFormats = [
+          { format_id: 'audio-320', quality: '320 kbps (MP3 - Máxima Qualidade)', ext: 'mp3', filesize: 0, url: '' },
+          { format_id: 'audio-256', quality: '256 kbps (M4A / AAC)', ext: 'm4a', filesize: 0, url: '' },
+          { format_id: 'audio-192', quality: '192 kbps (MP3 - Alta Qualidade)', ext: 'mp3', filesize: 0, url: '' },
+          { format_id: 'audio-128', quality: '128 kbps (MP3 - Padrão)', ext: 'mp3', filesize: 0, url: '' },
+          { format_id: 'audio-64', quality: '64 kbps (Opus / WebM)', ext: 'opus', filesize: 0, url: '' }
+        ];
 
         return {
           title: data.title || 'Vídeo do YouTube',
           thumbnail: data.videoThumbnails?.[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-          duration: duration,
-          uploader: data.author || 'YouTube Channel',
+          duration: data.lengthSeconds || 0,
+          uploader: data.author || 'Canal do YouTube',
           views: data.viewCount || 0,
-          video_formats: videoFormats.slice(0, 10),
-          audio_formats: audioFormats.slice(0, 5),
+          video_formats: videoFormats,
+          audio_formats: audioFormats,
           subtitles: [],
-          original_url: url
+          original_url: originalUrl
         };
       }
     } catch {}
   }
-
-  // oEmbed Fallback
-  try {
-    const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`, { signal: AbortSignal.timeout(4000) });
-    if (oembedRes.ok) {
-      const data = await oembedRes.json();
-      const duration = await fetchYouTubeDuration(videoId);
-
-      return {
-        title: data.title || 'Vídeo do YouTube',
-        thumbnail: data.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        duration: duration,
-        uploader: data.author_name || 'YouTube',
-        views: 0,
-        video_formats: [
-          { format_id: '4k', quality: '2160p (4K Ultra HD)', height: 2160, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
-          { format_id: '2k', quality: '1440p (2K Quad HD)', height: 1440, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
-          { format_id: '1080p', quality: '1080p HD', height: 1080, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
-          { format_id: '720p', quality: '720p', height: 720, ext: 'mp4', filesize: 0, has_audio: true, url: '' }
-        ],
-        audio_formats: [
-          { format_id: 'audio-best', quality: '320 kbps', ext: 'mp3', filesize: 0, url: '' }
-        ],
-        subtitles: [],
-        original_url: url
-      };
-    }
-  } catch {}
 
   return null;
 }

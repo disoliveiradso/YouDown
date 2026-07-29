@@ -49,6 +49,12 @@ interface PopupMessage {
   position?: 'toast' | 'modal';
 }
 
+function isValidYouTubeUrl(urlStr: string): boolean {
+  if (!urlStr || !urlStr.trim()) return false;
+  const pattern = /^(https?:\/\/)?(www\.|m\.)?(youtube\.com\/(watch\?.*v=|shorts\/|embed\/)|youtu\.be\/)[a-zA-Z0-9_-]{11}/i;
+  return pattern.test(urlStr.trim());
+}
+
 export default function Home() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -65,6 +71,12 @@ export default function Home() {
   // Popup & Modal States
   const [popups, setPopups] = useState<PopupMessage[]>([]);
   const [activeModal, setActiveModal] = useState<'terms' | 'privacy' | null>(null);
+
+  // Validation States
+  const trimmedUrl = url.trim();
+  const isEmpty = trimmedUrl === '';
+  const isValidUrl = isValidYouTubeUrl(trimmedUrl);
+  const isInvalidUrl = !isEmpty && !isValidUrl;
 
   const addPopup = (message: Omit<PopupMessage, 'id'>) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -107,11 +119,11 @@ export default function Home() {
 
   const handleFetchInfo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim()) {
+    if (!isValidUrl) {
       addPopup({
         type: 'warning',
-        title: 'URL Necessária',
-        description: 'Por favor, insira o link de um vídeo do YouTube válido.',
+        title: 'URL Inválida',
+        description: 'Por favor, insira o link de um vídeo do YouTube válido (ex: https://youtube.com/watch?v=...).',
         position: 'toast'
       });
       return;
@@ -133,7 +145,7 @@ export default function Home() {
       const response = await fetch('/api/info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({ url: trimmedUrl }),
       });
 
       const data = await response.json();
@@ -363,7 +375,15 @@ export default function Home() {
 
         {/* Input & Search Form */}
         <form onSubmit={handleFetchInfo} className="mb-6 sm:mb-8">
-          <div className="relative glass-card rounded-2xl p-2 flex flex-col sm:flex-row items-center gap-2 border border-white/10 shadow-2xl focus-within:border-indigo-500/50 transition-all">
+          <div
+            className={`relative glass-card rounded-2xl p-2 flex flex-col sm:flex-row items-center gap-2 transition-all ${
+              isInvalidUrl
+                ? 'border-2 border-red-500/80 bg-red-950/20 shadow-lg shadow-red-500/10'
+                : isValidUrl
+                ? 'border border-indigo-500/50 bg-indigo-950/20 shadow-xl shadow-indigo-500/10'
+                : 'border border-white/10 shadow-2xl focus-within:border-indigo-500/50'
+            }`}
+          >
             <div className="relative flex-1 w-full flex items-center">
               <input
                 type="url"
@@ -376,8 +396,12 @@ export default function Home() {
             </div>
             <button
               type="submit"
-              disabled={loading}
-              className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold px-6 py-3.5 sm:py-4 rounded-xl text-sm sm:text-base flex items-center justify-center space-x-2 transition-all shadow-lg shadow-indigo-500/25 shrink-0 disabled:opacity-50"
+              disabled={loading || !isValidUrl}
+              className={`w-full sm:w-auto font-semibold px-6 py-3.5 sm:py-4 rounded-xl text-sm sm:text-base flex items-center justify-center space-x-2 transition-all shrink-0 ${
+                isValidUrl && !loading
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-lg shadow-indigo-500/25 cursor-pointer active:scale-[0.98]'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none border border-slate-700/50'
+              }`}
             >
               {loading ? (
                 <>
@@ -392,6 +416,14 @@ export default function Home() {
               )}
             </button>
           </div>
+
+          {/* Mensagem de Erro de Link Inválido */}
+          {isInvalidUrl && (
+            <div className="flex items-center space-x-2 text-xs text-red-400 mt-2.5 px-3 font-medium animate-fadeIn">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <span>Link do YouTube inválido. Cole uma URL no formato: https://www.youtube.com/watch?v=... ou https://youtu.be/...</span>
+            </div>
+          )}
         </form>
 
         {/* Options & Features Bar */}

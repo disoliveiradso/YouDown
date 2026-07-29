@@ -4,6 +4,11 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'YouDown - Download de Vídeos & Áudios',
   description: 'Baixe vídeos e áudios do YouTube e de centenas de plataformas com 1 clique. Sem anúncios, sem instalações.',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 export default function RootLayout({
