@@ -158,6 +158,14 @@ async function fetchYouTubeEmbedInfo(videoId: string, originalUrl: string) {
             subtitles: [],
             original_url: originalUrl
           };
+        } else {
+          return {
+            title: videoDetails.title || 'Vídeo do YouTube',
+            thumbnail: videoDetails.thumbnail?.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            duration: durationSecs,
+            uploader: videoDetails.author || 'Canal do YouTube',
+            views: videoDetails.viewCount ? parseInt(videoDetails.viewCount) : 0
+          }
         }
       }
     }
@@ -252,6 +260,12 @@ export async function POST(request: Request) {
 
     const videoId = extractVideoId(url);
 
+    // PRE-FETCH REAL METADATA FOR FALLBACKS
+    let embedMetadata: any = null;
+    if (videoId) {
+      embedMetadata = await fetchYouTubeEmbedInfo(videoId, url);
+    }
+
     // Try yt-dlp first with iOS/mWeb client to bypass YouTube antibot checks
     try {
       const { stdout } = await execFileAsync('yt-dlp', [
@@ -320,16 +334,15 @@ export async function POST(request: Request) {
 
       let duration = info.duration || 0;
       if (!duration && videoId) {
-        const embedData = await fetchYouTubeEmbedInfo(videoId, url);
-        if (embedData?.duration) duration = embedData.duration;
+        if (embedMetadata?.duration) duration = embedMetadata.duration;
       }
 
       return NextResponse.json({
-        title: info.title || 'Sem título',
-        thumbnail: info.thumbnail || '',
+        title: info.title || embedMetadata?.title || 'Sem título',
+        thumbnail: info.thumbnail || embedMetadata?.thumbnail || '',
         duration: duration,
-        uploader: info.uploader || 'Desconhecido',
-        views: info.view_count || 0,
+        uploader: info.uploader || embedMetadata?.uploader || 'Desconhecido',
+        views: info.view_count || embedMetadata?.views || 0,
         video_formats: videoFormats.slice(0, 10),
         audio_formats: audioFormats.slice(0, 5),
         subtitles: [],
@@ -339,9 +352,8 @@ export async function POST(request: Request) {
       // 4-Tier Fallback Sequence
       if (videoId) {
         // Fallback 1: YouTube Embed HTML with bracket JSON parser
-        const embedData = await fetchYouTubeEmbedInfo(videoId, url);
-        if (embedData && embedData.video_formats.length > 0) {
-          return NextResponse.json(embedData);
+        if (embedMetadata && embedMetadata.video_formats && embedMetadata.video_formats.length > 0) {
+          return NextResponse.json(embedMetadata);
         }
 
         const pipedData = await fetchPipedInfo(videoId, url);
@@ -357,11 +369,11 @@ export async function POST(request: Request) {
 
       // Guaranteed Fallback (Never fail the UI)
       return NextResponse.json({
-        title: 'Vídeo do YouTube',
-        thumbnail: `https://i.ytimg.com/vi/${videoId || 'default'}/hqdefault.jpg`,
-        duration: 0,
-        uploader: 'YouTube',
-        views: 0,
+        title: embedMetadata?.title || 'Vídeo do YouTube',
+        thumbnail: embedMetadata?.thumbnail || `https://i.ytimg.com/vi/${videoId || 'default'}/maxresdefault.jpg`,
+        duration: embedMetadata?.duration || 0,
+        uploader: embedMetadata?.uploader || 'YouTube',
+        views: embedMetadata?.views || 0,
         video_formats: [
           { format_id: 'yt-1080', quality: '1080p HD', height: 1080, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
           { format_id: 'yt-720', quality: '720p', height: 720, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
