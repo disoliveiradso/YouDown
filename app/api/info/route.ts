@@ -19,9 +19,9 @@ export async function POST(request: Request) {
         '-j',
         '--no-warnings',
         '--socket-timeout', '10',
-        '--extractor-args', 'youtube:client=ANDROID,IOS,TV',
+        '--extractor-args', 'youtube:client=WEB,IOS,ANDROID,TV',
         url
-      ], { maxBuffer: 10 * 1024 * 1024 });
+      ], { maxBuffer: 15 * 1024 * 1024 });
 
       const info = JSON.parse(stdout);
       const formats = info.formats || [];
@@ -42,7 +42,11 @@ export async function POST(request: Request) {
           if (height && !seenResolutions.has(height)) {
             seenResolutions.add(height);
             let qualityLabel = `${height}p`;
-            if (fps && Number(fps) >= 50) qualityLabel += fps;
+            if (height >= 2160) qualityLabel += ' (4K Ultra HD)';
+            else if (height >= 1440) qualityLabel += ' (2K Quad HD)';
+            else if (height >= 1080) qualityLabel += ' HD';
+            else if (fps && Number(fps) >= 50) qualityLabel += fps;
+
             videoFormats.push({
               format_id: f.format_id,
               quality: qualityLabel,
@@ -80,8 +84,8 @@ export async function POST(request: Request) {
         duration: info.duration || 0,
         uploader: info.uploader || 'Desconhecido',
         views: info.view_count || 0,
-        video_formats: videoFormats.slice(0, 6),
-        audio_formats: audioFormats.slice(0, 4),
+        video_formats: videoFormats.slice(0, 10),
+        audio_formats: audioFormats.slice(0, 5),
         subtitles: [],
         original_url: url
       });
@@ -118,13 +122,20 @@ async function fallbackMetadata(url: string) {
         const audioFormats: any[] = [];
         const seenH = new Set();
 
-        for (const fmt of (data.formatStreams || [])) {
-          const h = fmt.height || 720;
-          if (!seenH.has(h)) {
+        const allFmts = [...(data.adaptiveFormats || []), ...(data.formatStreams || [])];
+
+        for (const fmt of allFmts) {
+          const h = fmt.height || (fmt.qualityLabel ? parseInt(fmt.qualityLabel) : 0);
+          if (h && !seenH.has(h)) {
             seenH.add(h);
+            let q = fmt.qualityLabel || `${h}p`;
+            if (h >= 2160) q += ' (4K Ultra HD)';
+            else if (h >= 1440) q += ' (2K Quad HD)';
+            else if (h >= 1080) q += ' HD';
+
             videoFormats.push({
               format_id: `inv-${h}`,
-              quality: fmt.qualityLabel || `${h}p`,
+              quality: q,
               height: h,
               ext: fmt.container || 'mp4',
               filesize: 0,
@@ -138,7 +149,7 @@ async function fallbackMetadata(url: string) {
           if (fmt.type?.includes('audio')) {
             audioFormats.push({
               format_id: 'inv-audio',
-              quality: '128 kbps',
+              quality: '320 kbps',
               ext: 'mp3',
               filesize: 0,
               url: fmt.url
@@ -147,14 +158,16 @@ async function fallbackMetadata(url: string) {
           }
         }
 
+        videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
+
         return {
           title: data.title || 'Vídeo do YouTube',
           thumbnail: data.videoThumbnails?.[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
           duration: data.lengthSeconds || 0,
           uploader: data.author || 'YouTube Channel',
           views: data.viewCount || 0,
-          video_formats: videoFormats.slice(0, 6),
-          audio_formats: audioFormats.slice(0, 4),
+          video_formats: videoFormats.slice(0, 10),
+          audio_formats: audioFormats.slice(0, 5),
           subtitles: [],
           original_url: url
         };
@@ -174,7 +187,9 @@ async function fallbackMetadata(url: string) {
         uploader: data.author_name || 'YouTube',
         views: 0,
         video_formats: [
-          { format_id: 'best', quality: '1080p', height: 1080, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
+          { format_id: '4k', quality: '2160p (4K Ultra HD)', height: 2160, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
+          { format_id: '2k', quality: '1440p (2K Quad HD)', height: 1440, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
+          { format_id: '1080p', quality: '1080p HD', height: 1080, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
           { format_id: '720p', quality: '720p', height: 720, ext: 'mp4', filesize: 0, has_audio: true, url: '' }
         ],
         audio_formats: [
