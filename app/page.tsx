@@ -14,9 +14,14 @@ import {
   Eye, 
   FileText, 
   Layers, 
-  Zap,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Github,
+  Check,
+  X,
+  Info,
+  ExternalLink,
+  ShieldAlert
 } from 'lucide-react';
 
 interface FormatOption {
@@ -41,10 +46,17 @@ interface VideoInfo {
   original_url: string;
 }
 
+interface PopupMessage {
+  id: string;
+  type: 'error' | 'success' | 'info' | 'warning';
+  title: string;
+  description: string;
+  position?: 'toast' | 'modal';
+}
+
 export default function Home() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [tab, setTab] = useState<'video' | 'audio'>('video');
   const [selectedFormat, setSelectedFormat] = useState<FormatOption | null>(null);
@@ -54,6 +66,27 @@ export default function Home() {
   const [downloadSubtitles, setDownloadSubtitles] = useState(false);
   const [audioOnly, setAudioOnly] = useState(false);
   const [playlistMode, setPlaylistMode] = useState(false);
+
+  // Popup & Modal States
+  const [popups, setPopups] = useState<PopupMessage[]>([]);
+  const [activeModal, setActiveModal] = useState<'terms' | 'privacy' | null>(null);
+
+  const addPopup = (message: Omit<PopupMessage, 'id'>) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    const newPopup = { ...message, id };
+    setPopups((prev) => [...prev, newPopup]);
+
+    // Auto dismiss toasts after 6 seconds
+    if (message.position !== 'modal') {
+      setTimeout(() => {
+        removePopup(id);
+      }, 6000);
+    }
+  };
+
+  const removePopup = (id: string) => {
+    setPopups((prev) => prev.filter((p) => p.id !== id));
+  };
 
   const formatDuration = (seconds: number) => {
     if (!seconds) return '00:00';
@@ -80,9 +113,16 @@ export default function Home() {
     if (!url.trim()) return;
 
     setLoading(true);
-    setError(null);
     setVideoInfo(null);
     setSelectedFormat(null);
+
+    // Toast de aviso de responsabilidade do usuário
+    addPopup({
+      type: 'info',
+      title: 'Aviso de Responsabilidade',
+      description: 'Ao buscar este link, você confirma que o uso e o processamento dos dados/arquivos são de sua inteira responsabilidade.',
+      position: 'toast'
+    });
 
     try {
       const response = await fetch('/api/info', {
@@ -105,8 +145,21 @@ export default function Home() {
         setTab('video');
         if (data.video_formats?.length > 0) setSelectedFormat(data.video_formats[0]);
       }
+
+      addPopup({
+        type: 'success',
+        title: 'Mídia Encontrada!',
+        description: 'Selecione a resolução ou formato desejado para iniciar a transferência.',
+        position: 'toast'
+      });
+
     } catch (err: any) {
-      setError(err.message || 'Erro ao conectar ao servidor.');
+      addPopup({
+        type: 'error',
+        title: 'Erro ao buscar mídia',
+        description: err.message || 'Erro ao conectar ao servidor. Verifique o link e tente novamente.',
+        position: 'toast'
+      });
     } finally {
       setLoading(false);
     }
@@ -133,7 +186,6 @@ export default function Home() {
         throw new Error(data.error || 'Falha ao processar download');
       }
 
-      // If direct url or streaming link returned
       if (data.download_url) {
         const link = document.createElement('a');
         link.href = data.download_url;
@@ -143,9 +195,21 @@ export default function Home() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+
+        addPopup({
+          type: 'success',
+          title: 'Download Iniciado',
+          description: 'A transferência da sua mídia foi iniciada no navegador.',
+          position: 'toast'
+        });
       }
     } catch (err: any) {
-      alert(err.message || 'Erro ao iniciar o download.');
+      addPopup({
+        type: 'error',
+        title: 'Falha no Download',
+        description: err.message || 'Erro ao gerar o fluxo de download.',
+        position: 'toast'
+      });
     } finally {
       setDownloading(false);
     }
@@ -156,6 +220,102 @@ export default function Home() {
       {/* Background Decorative Gradients */}
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-[128px] pointer-events-none" />
       <div className="absolute top-1/3 -right-40 w-96 h-96 bg-purple-600/15 rounded-full blur-[128px] pointer-events-none" />
+
+      {/* Popups & Toasts Container */}
+      <div className="fixed top-5 right-5 z-[100] flex flex-col space-y-3 max-w-md w-full px-4 pointer-events-none">
+        {popups.filter(p => p.position !== 'modal').map((popup) => (
+          <div
+            key={popup.id}
+            className={`pointer-events-auto p-4 rounded-xl border backdrop-blur-xl shadow-2xl flex items-start space-x-3 transition-all animate-fadeIn ${
+              popup.type === 'error'
+                ? 'bg-red-950/80 border-red-500/30 text-red-200'
+                : popup.type === 'success'
+                ? 'bg-emerald-950/80 border-emerald-500/30 text-emerald-200'
+                : popup.type === 'warning'
+                ? 'bg-amber-950/80 border-amber-500/30 text-amber-200'
+                : 'bg-indigo-950/80 border-indigo-500/30 text-indigo-200'
+            }`}
+          >
+            {popup.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />}
+            {popup.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />}
+            {popup.type === 'warning' && <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />}
+            {popup.type === 'info' && <Info className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />}
+
+            <div className="flex-1 text-xs sm:text-sm">
+              <h4 className="font-bold text-white mb-0.5">{popup.title}</h4>
+              <p className="opacity-90 leading-relaxed">{popup.description}</p>
+            </div>
+
+            <button
+              onClick={() => removePopup(popup.id)}
+              className="text-slate-400 hover:text-white p-1 rounded-md transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Terms & Privacy Modal */}
+      {activeModal && (
+        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-card max-w-xl w-full rounded-2xl p-6 sm:p-8 space-y-6 border border-white/10 shadow-2xl relative animate-fadeIn">
+            <button
+              onClick={() => setActiveModal(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {activeModal === 'terms' ? (
+              <>
+                <div className="flex items-center space-x-3 text-indigo-400">
+                  <ShieldCheck className="w-6 h-6" />
+                  <h3 className="text-xl font-bold text-white">Termos de Uso</h3>
+                </div>
+                <div className="text-xs sm:text-sm text-slate-300 space-y-4 max-h-96 overflow-y-auto pr-2">
+                  <p>
+                    O <strong>YouDown</strong> é uma interface web de código aberto e gratuita desenvolvida apenas como um meio que conecta o usuário às funcionalidades públicas da biblioteca <strong>yt-dlp</strong>.
+                  </p>
+                  <p>
+                    <strong>Responsabilidade de Uso:</strong> O site não armazena, hospeda, processa ou distribui nenhum arquivo de mídia, áudio ou vídeo em seus servidores. O download é realizado via redirecionamento de fluxo diretamente para o dispositivo do usuário.
+                  </p>
+                  <p>
+                    O usuário assume total responsabilidade pelo conteúdo baixado e pelo cumprimento dos direitos autorais aplicáveis em sua jurisdição. O serviço é 100% gratuito e sem fins lucrativos.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center space-x-3 text-purple-400">
+                  <ShieldAlert className="w-6 h-6" />
+                  <h3 className="text-xl font-bold text-white">Política de Privacidade</h3>
+                </div>
+                <div className="text-xs sm:text-sm text-slate-300 space-y-4 max-h-96 overflow-y-auto pr-2">
+                  <p>
+                    Sua privacidade é totalmente preservada no <strong>YouDown</strong>.
+                  </p>
+                  <p>
+                    <strong>Nenhum Dado Coletado:</strong> Não exigimos cadastro, não utilizamos cookies de rastreamento, nem armazenamos histórico das URLs inseridas ou dos arquivos baixados.
+                  </p>
+                  <p>
+                    Todas as requisições utilizam funções serverless temporárias apenas para extrair os links de dados públicos fornecidos pelo <strong>yt-dlp</strong>.
+                  </p>
+                </div>
+              </>
+            )}
+
+            <div className="pt-4 border-t border-white/10 flex justify-end">
+              <button
+                onClick={() => setActiveModal(null)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl text-xs font-semibold transition-all"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <header className="border-b border-white/5 bg-[#090d16]/80 backdrop-blur-md sticky top-0 z-50">
@@ -171,7 +331,7 @@ export default function Home() {
 
           <div className="flex items-center space-x-2 text-xs text-slate-400 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Gratuito & Sem Anúncios</span>
+            <span>100% Gratuito & Livre</span>
           </div>
         </div>
       </header>
@@ -233,7 +393,14 @@ export default function Home() {
 
         {/* Additional Features Bar */}
         <div className="glass-card rounded-xl p-4 mb-8 flex flex-wrap items-center justify-between gap-4 text-xs sm:text-sm text-slate-300">
-          <label className="flex items-center space-x-2.5 cursor-pointer">
+          <label className="flex items-center space-x-3 cursor-pointer group">
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+              audioOnly 
+                ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/30' 
+                : 'border-slate-600 bg-slate-800/80 group-hover:border-slate-400'
+            }`}>
+              {audioOnly && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+            </div>
             <input
               type="checkbox"
               checked={audioOnly}
@@ -241,51 +408,54 @@ export default function Home() {
                 setAudioOnly(e.target.checked);
                 if (e.target.checked && videoInfo) setTab('audio');
               }}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+              className="sr-only"
             />
-            <span className="flex items-center space-x-1.5">
+            <span className="flex items-center space-x-1.5 select-none">
               <Music className="w-4 h-4 text-indigo-400" />
               <span>Apenas Áudio (MP3/M4A)</span>
             </span>
           </label>
 
-          <label className="flex items-center space-x-2.5 cursor-pointer">
+          <label className="flex items-center space-x-3 cursor-pointer group">
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+              downloadSubtitles 
+                ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/30' 
+                : 'border-slate-600 bg-slate-800/80 group-hover:border-slate-400'
+            }`}>
+              {downloadSubtitles && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+            </div>
             <input
               type="checkbox"
               checked={downloadSubtitles}
               onChange={(e) => setDownloadSubtitles(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+              className="sr-only"
             />
-            <span className="flex items-center space-x-1.5">
+            <span className="flex items-center space-x-1.5 select-none">
               <FileText className="w-4 h-4 text-purple-400" />
               <span>Incluir Legendas</span>
             </span>
           </label>
 
-          <label className="flex items-center space-x-2.5 cursor-pointer">
+          <label className="flex items-center space-x-3 cursor-pointer group">
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+              playlistMode 
+                ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/30' 
+                : 'border-slate-600 bg-slate-800/80 group-hover:border-slate-400'
+            }`}>
+              {playlistMode && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+            </div>
             <input
               type="checkbox"
               checked={playlistMode}
               onChange={(e) => setPlaylistMode(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+              className="sr-only"
             />
-            <span className="flex items-center space-x-1.5">
+            <span className="flex items-center space-x-1.5 select-none">
               <Layers className="w-4 h-4 text-pink-400" />
               <span>Suporte a Playlist</span>
             </span>
           </label>
         </div>
-
-        {/* Error Alert */}
-        {error && (
-          <div className="mb-8 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 flex items-start space-x-3 text-sm animate-fadeIn">
-            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold text-red-200">Não foi possível processar este link</p>
-              <p className="text-red-400/90 mt-0.5">{error}</p>
-            </div>
-          </div>
-        )}
 
         {/* Video Metadata & Format Options Card */}
         {videoInfo && (
@@ -423,13 +593,48 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 py-6 text-center text-xs text-slate-500">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© 2026 YouDown. Desenvolvido para Vercel Serverless com yt-dlp.</p>
-          <div className="flex items-center space-x-4 text-slate-400">
-            <span>Termos de Uso</span>
+      <footer className="border-t border-white/5 py-8 bg-[#090d16]/90 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-slate-400">
+          {/* GitHub Buttons */}
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              href="https://github.com/disoliveiradso/YouDown"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-2 rounded-xl text-slate-200 transition-all"
+            >
+              <Github className="w-4 h-4 text-white" />
+              <span>Repositório do Site</span>
+              <ExternalLink className="w-3 h-3 text-slate-400" />
+            </a>
+
+            <a
+              href="https://github.com/yt-dlp/yt-dlp"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-2 rounded-xl text-slate-200 transition-all"
+            >
+              <Github className="w-4 h-4 text-indigo-400" />
+              <span>Projeto yt-dlp</span>
+              <ExternalLink className="w-3 h-3 text-slate-400" />
+            </a>
+          </div>
+
+          {/* Legal Links */}
+          <div className="flex items-center space-x-5 text-slate-300">
+            <button
+              onClick={() => setActiveModal('terms')}
+              className="hover:text-indigo-400 transition-colors"
+            >
+              Termos de Uso
+            </button>
             <span>•</span>
-            <span>Privacidade</span>
+            <button
+              onClick={() => setActiveModal('privacy')}
+              className="hover:text-indigo-400 transition-colors"
+            >
+              Privacidade & Isenção
+            </button>
           </div>
         </div>
       </footer>
