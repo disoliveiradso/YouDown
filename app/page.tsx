@@ -76,7 +76,6 @@ export default function Home() {
     const newPopup = { ...message, id };
     setPopups((prev) => [...prev, newPopup]);
 
-    // Auto dismiss toasts after 6 seconds
     if (message.position !== 'modal') {
       setTimeout(() => {
         removePopup(id);
@@ -242,8 +241,8 @@ export default function Home() {
             {popup.type === 'info' && <Info className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />}
 
             <div className="flex-1 text-xs sm:text-sm">
-              <h4 className="font-bold text-white mb-0.5">{popup.title}</h4>
-              <p className="opacity-90 leading-relaxed">{popup.description}</p>
+              <h4 className="font-bold text-white mb-0.5 leading-snug">{popup.title}</h4>
+              <p className="opacity-90 leading-relaxed text-balance">{popup.description}</p>
             </div>
 
             <button
@@ -270,10 +269,10 @@ export default function Home() {
             {activeModal === 'terms' ? (
               <>
                 <div className="flex items-center space-x-3 text-indigo-400">
-                  <ShieldCheck className="w-6 h-6" />
-                  <h3 className="text-xl font-bold text-white">Termos de Uso</h3>
+                  <ShieldCheck className="w-6 h-6 shrink-0" />
+                  <h3 className="text-xl font-bold text-white leading-snug">Termos de Uso</h3>
                 </div>
-                <div className="text-xs sm:text-sm text-slate-300 space-y-4 max-h-96 overflow-y-auto pr-2">
+                <div className="text-xs sm:text-sm text-slate-300 space-y-4 max-h-96 overflow-y-auto pr-2 leading-relaxed text-pretty">
                   <p>
                     O <strong>YouDown</strong> é uma interface web de código aberto e gratuita desenvolvida apenas como um meio que conecta o usuário às funcionalidades públicas da biblioteca <strong>yt-dlp</strong>.
                   </p>
@@ -288,10 +287,10 @@ export default function Home() {
             ) : (
               <>
                 <div className="flex items-center space-x-3 text-purple-400">
-                  <ShieldAlert className="w-6 h-6" />
-                  <h3 className="text-xl font-bold text-white">Política de Privacidade</h3>
+                  <ShieldAlert className="w-6 h-6 shrink-0" />
+                  <h3 className="text-xl font-bold text-white leading-snug">Política de Privacidade</h3>
                 </div>
-                <div className="text-xs sm:text-sm text-slate-300 space-y-4 max-h-96 overflow-y-auto pr-2">
+                <div className="text-xs sm:text-sm text-slate-300 space-y-4 max-h-96 overflow-y-auto pr-2 leading-relaxed text-pretty">
                   <p>
                     Sua privacidade é totalmente preservada no <strong>YouDown</strong>.
                   </p>
@@ -317,40 +316,41 @@ export default function Home() {
         </div>
       )}
 
-      {/* Header */}
+      {/* Responsive Header */}
       <header className="border-b border-white/5 bg-[#090d16]/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-0 sm:h-16 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 shrink-0">
               <Download className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-indigo-300">
+            <span className="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-indigo-300 whitespace-nowrap">
               YouDown
             </span>
           </div>
 
-          <div className="flex items-center space-x-2 text-xs text-slate-400 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          {/* Badge posicionado abaixo em telas pequenas (mobile), e alinhado na direita em telas maiores */}
+          <div className="flex items-center space-x-2 text-xs text-slate-400 bg-white/5 border border-white/10 px-3.5 py-1.5 rounded-full whitespace-nowrap sm:mt-0">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>100% Gratuito & Livre</span>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-12 flex-1 w-full flex flex-col justify-center">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 flex-1 w-full flex flex-col justify-center">
         {/* Title & Tagline */}
-        <div className="text-center mb-10 space-y-3">
+        <div className="text-center mb-8 sm:mb-10 space-y-3 sm:space-y-4">
           <div className="inline-flex items-center space-x-2 bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full text-indigo-400 text-xs font-semibold uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Download Ultra Rápido em 1 Clique</span>
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <span className="whitespace-nowrap">Download Ultra Rápido em 1 Clique</span>
           </div>
-          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white">
+          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight sm:leading-tight">
             Baixe seus vídeos e áudios <br className="hidden sm:inline" />
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
               sem complicações
             </span>
           </h1>
-          <p className="text-slate-400 text-sm sm:text-base max-w-xl mx-auto">
+          <p className="text-slate-400 text-xs sm:text-base max-w-xl mx-auto leading-relaxed text-pretty">
             Cole a URL do vídeo do YouTube e escolha a qualidade desejada (4K, 1080p, MP3, M4A).
           </p>
         </div>
@@ -358,32 +358,32 @@ export default function Home() {
         {/* Input Form */}
         <form onSubmit={handleFetchInfo} className="mb-8">
           <div className="relative glass-effect rounded-2xl p-2 shadow-2xl glow-purple focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-            <div className="flex items-center">
-              <div className="pl-4 text-slate-400">
-                <Search className="w-5 h-5" />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="flex items-center flex-1 pl-2 sm:pl-4">
+                <Search className="w-5 h-5 text-slate-400 shrink-0" />
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="Cole o link do vídeo ou playlist aqui..."
+                  required
+                  className="w-full bg-transparent border-0 py-3 px-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-0 text-xs sm:text-base"
+                />
               </div>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="Cole o link do vídeo ou playlist aqui (ex: https://www.youtube.com/watch?v=...)"
-                required
-                className="w-full bg-transparent border-0 py-3.5 px-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-0 text-sm sm:text-base"
-              />
               <button
                 type="submit"
                 disabled={loading || !url.trim()}
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold px-6 py-3.5 rounded-xl text-sm flex items-center space-x-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold px-6 py-3.5 rounded-xl text-sm flex items-center justify-center space-x-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                     <span>Buscando...</span>
                   </>
                 ) : (
                   <>
                     <span>Buscar</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4 shrink-0" />
                   </>
                 )}
               </button>
@@ -392,9 +392,9 @@ export default function Home() {
         </form>
 
         {/* Additional Features Bar */}
-        <div className="glass-card rounded-xl p-4 mb-8 flex flex-wrap items-center justify-between gap-4 text-xs sm:text-sm text-slate-300">
+        <div className="glass-card rounded-xl p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs sm:text-sm text-slate-300">
           <label className="flex items-center space-x-3 cursor-pointer group">
-            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all shrink-0 ${
               audioOnly 
                 ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/30' 
                 : 'border-slate-600 bg-slate-800/80 group-hover:border-slate-400'
@@ -410,14 +410,14 @@ export default function Home() {
               }}
               className="sr-only"
             />
-            <span className="flex items-center space-x-1.5 select-none">
-              <Music className="w-4 h-4 text-indigo-400" />
+            <span className="flex items-center space-x-1.5 select-none whitespace-nowrap">
+              <Music className="w-4 h-4 text-indigo-400 shrink-0" />
               <span>Apenas Áudio (MP3/M4A)</span>
             </span>
           </label>
 
           <label className="flex items-center space-x-3 cursor-pointer group">
-            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all shrink-0 ${
               downloadSubtitles 
                 ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/30' 
                 : 'border-slate-600 bg-slate-800/80 group-hover:border-slate-400'
@@ -430,14 +430,14 @@ export default function Home() {
               onChange={(e) => setDownloadSubtitles(e.target.checked)}
               className="sr-only"
             />
-            <span className="flex items-center space-x-1.5 select-none">
-              <FileText className="w-4 h-4 text-purple-400" />
+            <span className="flex items-center space-x-1.5 select-none whitespace-nowrap">
+              <FileText className="w-4 h-4 text-purple-400 shrink-0" />
               <span>Incluir Legendas</span>
             </span>
           </label>
 
           <label className="flex items-center space-x-3 cursor-pointer group">
-            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all shrink-0 ${
               playlistMode 
                 ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/30' 
                 : 'border-slate-600 bg-slate-800/80 group-hover:border-slate-400'
@@ -450,8 +450,8 @@ export default function Home() {
               onChange={(e) => setPlaylistMode(e.target.checked)}
               className="sr-only"
             />
-            <span className="flex items-center space-x-1.5 select-none">
-              <Layers className="w-4 h-4 text-pink-400" />
+            <span className="flex items-center space-x-1.5 select-none whitespace-nowrap">
+              <Layers className="w-4 h-4 text-pink-400 shrink-0" />
               <span>Suporte a Playlist</span>
             </span>
           </label>
@@ -459,7 +459,7 @@ export default function Home() {
 
         {/* Video Metadata & Format Options Card */}
         {videoInfo && (
-          <div className="glass-card rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl border border-white/10 animate-fadeIn">
+          <div className="glass-card rounded-2xl p-5 sm:p-8 space-y-6 shadow-2xl border border-white/10 animate-fadeIn">
             {/* Video Info Preview */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 pb-6 border-b border-white/10">
               <div className="relative group shrink-0 w-full sm:w-48 aspect-video rounded-xl overflow-hidden bg-slate-800 border border-white/10">
@@ -469,20 +469,20 @@ export default function Home() {
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[11px] font-mono text-white flex items-center space-x-1">
-                  <Clock className="w-3 h-3 text-indigo-400" />
+                  <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
                   <span>{formatDuration(videoInfo.duration)}</span>
                 </div>
               </div>
 
               <div className="space-y-2 flex-1 min-w-0">
-                <h2 className="text-lg font-bold text-white line-clamp-2 leading-snug">
+                <h2 className="text-base sm:text-lg font-bold text-white line-clamp-2 leading-snug text-pretty">
                   {videoInfo.title}
                 </h2>
-                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
                   <span className="font-medium text-slate-300">Canal: {videoInfo.uploader}</span>
                   {videoInfo.views > 0 && (
-                    <span className="flex items-center space-x-1">
-                      <Eye className="w-3.5 h-3.5" />
+                    <span className="flex items-center space-x-1 whitespace-nowrap">
+                      <Eye className="w-3.5 h-3.5 shrink-0" />
                       <span>{videoInfo.views.toLocaleString()} visualizações</span>
                     </span>
                   )}
@@ -499,13 +499,13 @@ export default function Home() {
                     setTab('video');
                     if (videoInfo.video_formats?.length > 0) setSelectedFormat(videoInfo.video_formats[0]);
                   }}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
                     tab === 'video'
                       ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  <Video className="w-4 h-4" />
+                  <Video className="w-4 h-4 shrink-0" />
                   <span>Vídeo com Som</span>
                 </button>
 
@@ -515,13 +515,13 @@ export default function Home() {
                     setTab('audio');
                     if (videoInfo.audio_formats?.length > 0) setSelectedFormat(videoInfo.audio_formats[0]);
                   }}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
                     tab === 'audio'
                       ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  <Music className="w-4 h-4" />
+                  <Music className="w-4 h-4 shrink-0" />
                   <span>Áudio Apenas</span>
                 </button>
               </div>
@@ -542,21 +542,21 @@ export default function Home() {
                       }`}
                     >
                       <div className="flex items-center space-x-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
                           isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
                         }`}>
                           {opt.ext.toUpperCase()}
                         </div>
                         <div>
                           <div className="text-sm font-bold text-white flex items-center space-x-2">
-                            <span>{opt.quality}</span>
+                            <span className="whitespace-nowrap">{opt.quality}</span>
                             {opt.height && opt.height >= 1080 && (
                               <span className="text-[10px] bg-gradient-to-r from-amber-500 to-orange-500 text-black px-1.5 py-0.2 font-extrabold rounded">
                                 HD
                               </span>
                             )}
                           </div>
-                          <span className="text-xs text-slate-400">{formatFileSize(opt.filesize)}</span>
+                          <span className="text-xs text-slate-400 whitespace-nowrap">{formatFileSize(opt.filesize)}</span>
                         </div>
                       </div>
 
@@ -573,17 +573,17 @@ export default function Home() {
                 type="button"
                 onClick={handleDownload}
                 disabled={downloading || !selectedFormat}
-                className="w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold py-4 rounded-xl text-base flex items-center justify-center space-x-3 shadow-xl shadow-indigo-600/30 transition-all disabled:opacity-50 active:scale-[0.99]"
+                className="w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold py-4 rounded-xl text-sm sm:text-base flex items-center justify-center space-x-3 shadow-xl shadow-indigo-600/30 transition-all disabled:opacity-50 active:scale-[0.99]"
               >
                 {downloading ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin shrink-0" />
                     <span>Iniciando Download...</span>
                   </>
                 ) : (
                   <>
-                    <Download className="w-5 h-5" />
-                    <span>Baixar Agora ({selectedFormat?.quality || 'Selecionado'})</span>
+                    <Download className="w-5 h-5 shrink-0" />
+                    <span className="whitespace-nowrap">Baixar Agora ({selectedFormat?.quality || 'Selecionado'})</span>
                   </>
                 )}
               </button>
@@ -592,36 +592,36 @@ export default function Home() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-8 bg-[#090d16]/90 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-slate-400">
+      {/* Responsive Footer */}
+      <footer className="border-t border-white/5 py-6 sm:py-8 bg-[#090d16]/90 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
           {/* GitHub Buttons */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             <a
               href="https://github.com/disoliveiradso/YouDown"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-2 rounded-xl text-slate-200 transition-all"
+              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-2 rounded-xl text-slate-200 transition-all whitespace-nowrap"
             >
-              <Github className="w-4 h-4 text-white" />
+              <Github className="w-4 h-4 text-white shrink-0" />
               <span>Repositório do Site</span>
-              <ExternalLink className="w-3 h-3 text-slate-400" />
+              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
             </a>
 
             <a
               href="https://github.com/yt-dlp/yt-dlp"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-2 rounded-xl text-slate-200 transition-all"
+              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-2 rounded-xl text-slate-200 transition-all whitespace-nowrap"
             >
-              <Github className="w-4 h-4 text-indigo-400" />
+              <Github className="w-4 h-4 text-indigo-400 shrink-0" />
               <span>Projeto yt-dlp</span>
-              <ExternalLink className="w-3 h-3 text-slate-400" />
+              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
             </a>
           </div>
 
           {/* Legal Links */}
-          <div className="flex items-center space-x-5 text-slate-300">
+          <div className="flex items-center space-x-5 text-slate-300 whitespace-nowrap">
             <button
               onClick={() => setActiveModal('terms')}
               className="hover:text-indigo-400 transition-colors"
