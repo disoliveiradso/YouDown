@@ -19,7 +19,7 @@ RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages || p
 
 # Copiar dependências do Next.js
 COPY package*.json ./
-RUN npm ci || npm install
+RUN npm install
 
 # Copiar todo o código-fonte do projeto
 COPY . .
