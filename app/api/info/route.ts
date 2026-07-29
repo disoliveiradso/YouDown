@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 const execFileAsync = promisify(execFile);
 
 export async function POST(request: Request) {
