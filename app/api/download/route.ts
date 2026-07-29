@@ -1,0 +1,107 @@
+import { NextResponse } from 'next/server';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const url = body.url?.trim();
+    const formatId = body.format_id;
+    const downloadType = body.type || 'video';
+
+    if (!url) {
+      return NextResponse.json({ error: 'URL é obrigatória' }, { status: 400 });
+    }
+
+    try {
+      const formatSelector = formatId ? formatId : (downloadType === 'video' ? 'bestvideo+bestaudio/best' : 'bestaudio/best');
+      const { stdout } = await execFileAsync('yt-dlp', [
+        '-g',
+        '-f', formatSelector,
+        '--no-warnings',
+        '--extractor-args', 'youtube:client=ANDROID,IOS,TV',
+        url
+      ]);
+
+      const urls = stdout.trim().split('\n').filter(Boolean);
+      const downloadUrl = urls[0];
+
+      // Get title
+      let title = 'video';
+      try {
+        const { stdout: titleOut } = await execFileAsync('yt-dlp', ['--get-title', url]);
+        title = titleOut.trim() || 'video';
+      } catch {}
+
+      const cleanTitle = title.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
+      const ext = downloadType === 'video' ? 'mp4' : 'mp3';
+
+      if (downloadUrl) {
+        return NextResponse.json({
+          download_url: downloadUrl,
+          title: cleanTitle,
+          filename: `${cleanTitle}.${ext}`,
+          ext: ext
+        });
+      }
+    } catch (ytErr) {
+      const fallbackRes = await fallbackDownloadUrl(url, downloadType);
+      if (fallbackRes) {
+        return NextResponse.json(fallbackRes);
+      }
+      throw ytErr;
+    }
+
+    return NextResponse.json({ error: 'Não foi possível gerar a URL de download' }, { status: 400 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Erro ao processar download' }, { status: 400 });
+  }
+}
+
+async function fallbackDownloadUrl(url: string, downloadType: string) {
+  const match = url.match(/(?:v=|\/([0-9A-Za-z_-]{11}).*|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})/);
+  const videoId = match ? (match[1] || match[2]) : null;
+  if (!videoId) return null;
+
+  const invidiousInstances = [
+    `https://inv.itissimple.org/api/v1/videos/${videoId}`,
+    `https://invidious.nerdvpn.de/api/v1/videos/${videoId}`,
+    `https://yewtu.be/api/v1/videos/${videoId}`
+  ];
+
+  for (const ep of invidiousInstances) {
+    try {
+      const res = await fetch(ep, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const data = await res.json();
+        const title = (data.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim();
+
+        if (downloadType === 'audio') {
+          for (const fmt of (data.adaptiveFormats || [])) {
+            if (fmt.type?.includes('audio')) {
+              return {
+                download_url: fmt.url,
+                title: title,
+                filename: `${title}.mp3`,
+                ext: 'mp3'
+              };
+            }
+          }
+        } else {
+          const formats = data.formatStreams || [];
+          if (formats.length > 0) {
+            return {
+              download_url: formats[0].url,
+              title: title,
+              filename: `${title}.mp4`,
+              ext: 'mp4'
+            };
+          }
+        }
+      }
+    } catch {}
+  }
+  return null;
+}
