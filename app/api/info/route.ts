@@ -7,6 +7,49 @@ export const runtime = 'nodejs';
 
 const execFileAsync = promisify(execFile);
 
+function extractVideoId(url: string): string | null {
+  const match = url.match(/(?:v=|\/([0-9A-Za-z_-]{11}).*|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})/);
+  return match ? (match[1] || match[2]) : null;
+}
+
+async function fetchYouTubeDuration(videoId: string): Promise<number> {
+  if (!videoId) return 0;
+  try {
+    const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (res.ok) {
+      const html = await res.text();
+      // 1. "lengthSeconds":"4952"
+      const matchLength = html.match(/"lengthSeconds":"(\d+)"/);
+      if (matchLength && matchLength[1]) {
+        const secs = parseInt(matchLength[1], 10);
+        if (secs > 0) return secs;
+      }
+      // 2. "approxDurationMs":"4952000"
+      const matchMs = html.match(/"approxDurationMs":"(\d+)"/);
+      if (matchMs && matchMs[1]) {
+        const secs = Math.floor(parseInt(matchMs[1], 10) / 1000);
+        if (secs > 0) return secs;
+      }
+      // 3. <meta itemprop="duration" content="PT1H22M32S">
+      const matchMeta = html.match(/itemprop="duration"\s+content="PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"/i);
+      if (matchMeta) {
+        const h = parseInt(matchMeta[1] || '0', 10);
+        const m = parseInt(matchMeta[2] || '0', 10);
+        const s = parseInt(matchMeta[3] || '0', 10);
+        const totalSecs = h * 3600 + m * 60 + s;
+        if (totalSecs > 0) return totalSecs;
+      }
+    }
+  } catch {}
+  return 0;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -15,6 +58,8 @@ export async function POST(request: Request) {
     if (!url) {
       return NextResponse.json({ error: 'URL é obrigatória' }, { status: 400 });
     }
+
+    const videoId = extractVideoId(url);
 
     // Try yt-dlp first
     try {
@@ -81,10 +126,15 @@ export async function POST(request: Request) {
 
       videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
 
+      let duration = info.duration || info.duration_string || 0;
+      if (!duration && videoId) {
+        duration = await fetchYouTubeDuration(videoId);
+      }
+
       return NextResponse.json({
         title: info.title || 'Sem título',
         thumbnail: info.thumbnail || '',
-        duration: info.duration || info.duration_string || 0,
+        duration: duration,
         uploader: info.uploader || 'Desconhecido',
         views: info.view_count || 0,
         video_formats: videoFormats.slice(0, 10),
@@ -96,6 +146,9 @@ export async function POST(request: Request) {
       // Fallback to Invidious/Piped/oEmbed
       const fallbackData = await fallbackMetadata(url);
       if (fallbackData) {
+        if (!fallbackData.duration && videoId) {
+          fallbackData.duration = await fetchYouTubeDuration(videoId);
+        }
         return NextResponse.json(fallbackData);
       }
       throw ytErr;
@@ -106,8 +159,7 @@ export async function POST(request: Request) {
 }
 
 async function fallbackMetadata(url: string) {
-  const match = url.match(/(?:v=|\/([0-9A-Za-z_-]{11}).*|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})/);
-  const videoId = match ? (match[1] || match[2]) : null;
+  const videoId = extractVideoId(url);
   if (!videoId) return null;
 
   const invidiousInstances = [
@@ -163,10 +215,15 @@ async function fallbackMetadata(url: string) {
 
         videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
 
+        let duration = data.lengthSeconds || 0;
+        if (!duration) {
+          duration = await fetchYouTubeDuration(videoId);
+        }
+
         return {
           title: data.title || 'Vídeo do YouTube',
           thumbnail: data.videoThumbnails?.[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-          duration: data.lengthSeconds || 0,
+          duration: duration,
           uploader: data.author || 'YouTube Channel',
           views: data.viewCount || 0,
           video_formats: videoFormats.slice(0, 10),
@@ -183,10 +240,12 @@ async function fallbackMetadata(url: string) {
     const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`, { signal: AbortSignal.timeout(4000) });
     if (oembedRes.ok) {
       const data = await oembedRes.json();
+      const duration = await fetchYouTubeDuration(videoId);
+
       return {
         title: data.title || 'Vídeo do YouTube',
         thumbnail: data.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        duration: 0,
+        duration: duration,
         uploader: data.author_name || 'YouTube',
         views: 0,
         video_formats: [

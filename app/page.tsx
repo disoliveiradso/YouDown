@@ -83,16 +83,19 @@ export default function Home() {
   };
 
   const formatDuration = (val: number | string) => {
-    if (!val) return '00:00';
+    if (!val) return '';
     if (typeof val === 'string' && val.includes(':')) {
       const parts = val.split(':');
+      if (parts.length === 3) {
+        return `${parts[0]}:${parts[1].padStart(2, '0')}:${parts[2].padStart(2, '0')}`;
+      }
       if (parts.length === 2) {
         return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
       }
       return val;
     }
     const seconds = typeof val === 'string' ? parseFloat(val) : val;
-    if (isNaN(seconds) || seconds <= 0) return '00:00';
+    if (isNaN(seconds) || seconds <= 0) return '';
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
@@ -468,10 +471,12 @@ export default function Home() {
                   alt={videoInfo.title}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[11px] font-mono text-white flex items-center space-x-1 border border-white/10 shadow-md">
-                  <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
-                  <span>{formatDuration(videoInfo.duration)}</span>
-                </div>
+                {formatDuration(videoInfo.duration) && (
+                  <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[11px] font-mono text-white flex items-center space-x-1 border border-white/10 shadow-md">
+                    <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
+                    <span>{formatDuration(videoInfo.duration)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2 flex-1 min-w-0">
@@ -643,7 +648,7 @@ export default function Home() {
             >
               <Github className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
               <span>yt-dlp</span>
-              <ExternalLink className="w-3 h-3 text-slate-500 shrink-0" />
+              <ExternalLink className="w-3.5 h-3 text-slate-500 shrink-0" />
             </a>
 
             <a
@@ -655,7 +660,7 @@ export default function Home() {
             >
               <Github className="w-3.5 h-3.5 text-purple-400 shrink-0" />
               <span>bgutil-ytdlp-pot</span>
-              <ExternalLink className="w-3 h-3 text-slate-500 shrink-0" />
+              <ExternalLink className="w-3.5 h-3 text-slate-500 shrink-0" />
             </a>
 
             <a
@@ -667,7 +672,7 @@ export default function Home() {
             >
               <Github className="w-3.5 h-3.5 text-pink-400 shrink-0" />
               <span>Invidious API</span>
-              <ExternalLink className="w-3 h-3 text-slate-500 shrink-0" />
+              <ExternalLink className="w-3.5 h-3 text-slate-500 shrink-0" />
             </a>
           </div>
 
