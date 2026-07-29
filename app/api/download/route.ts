@@ -15,47 +15,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'URL é obrigatória' }, { status: 400 });
     }
 
+    // Extract Title
+    let title = 'video';
     try {
-      const formatSelector = formatId ? formatId : (downloadType === 'video' ? 'bestvideo+bestaudio/best' : 'bestaudio/best');
-      const { stdout } = await execFileAsync('yt-dlp', [
-        '-g',
-        '-f', formatSelector,
-        '--no-warnings',
-        '--extractor-args', 'youtube:client=ANDROID,IOS,TV',
-        url
-      ]);
+      const { stdout: titleOut } = await execFileAsync('yt-dlp', ['--get-title', '--no-warnings', url]);
+      title = titleOut.trim() || 'video';
+    } catch {}
 
-      const urls = stdout.trim().split('\n').filter(Boolean);
-      const downloadUrl = urls[0];
+    const cleanTitle = title.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
+    const ext = downloadType === 'video' ? 'mp4' : 'mp3';
 
-      // Get title
-      let title = 'video';
-      try {
-        const { stdout: titleOut } = await execFileAsync('yt-dlp', ['--get-title', url]);
-        title = titleOut.trim() || 'video';
-      } catch {}
-
-      const cleanTitle = title.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
-      const ext = downloadType === 'video' ? 'mp4' : 'mp3';
-
-      if (downloadUrl) {
-        return NextResponse.json({
-          download_url: downloadUrl,
-          title: cleanTitle,
-          filename: `${cleanTitle}.${ext}`,
-          ext: ext
-        });
-      }
-    } catch (ytErr) {
+    // If format is Invidious fallback format
+    if (formatId && formatId.startsWith('inv-')) {
       const fallbackRes = await fallbackDownloadUrl(url, downloadType);
       if (fallbackRes) {
         return NextResponse.json(fallbackRes);
       }
-      throw ytErr;
     }
 
-    return NextResponse.json({ error: 'Não foi possível gerar a URL de download' }, { status: 400 });
+    // Generate real-time stream URL for Docker FFmpeg processing (guarantees video+audio at requested resolution)
+    const streamParams = new URLSearchParams({
+      url: url,
+      format_id: formatId || '',
+      type: downloadType,
+      title: cleanTitle
+    });
+
+    return NextResponse.json({
+      download_url: `/api/stream?${streamParams.toString()}`,
+      title: cleanTitle,
+      filename: `${cleanTitle}.${ext}`,
+      ext: ext
+    });
+
   } catch (err: any) {
+    const fallbackRes = await fallbackDownloadUrl(body.url, body.type || 'video');
+    if (fallbackRes) {
+      return NextResponse.json(fallbackRes);
+    }
     return NextResponse.json({ error: err.message || 'Erro ao processar download' }, { status: 400 });
   }
 }
