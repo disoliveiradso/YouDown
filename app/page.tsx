@@ -83,7 +83,7 @@ export default function Home() {
   };
 
   const formatDuration = (val: number | string) => {
-    if (!val) return '';
+    if (!val || val === 0 || val === '0') return '00:00';
     if (typeof val === 'string' && val.includes(':')) {
       const parts = val.split(':');
       if (parts.length === 3) {
@@ -95,7 +95,7 @@ export default function Home() {
       return val;
     }
     const seconds = typeof val === 'string' ? parseFloat(val) : val;
-    if (isNaN(seconds) || seconds <= 0) return '';
+    if (isNaN(seconds) || seconds <= 0) return '00:00';
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
@@ -471,12 +471,10 @@ export default function Home() {
                   alt={videoInfo.title}
                   className="w-full h-full object-cover"
                 />
-                {formatDuration(videoInfo.duration) && (
-                  <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[11px] font-mono text-white flex items-center space-x-1 border border-white/10 shadow-md">
-                    <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
-                    <span>{formatDuration(videoInfo.duration)}</span>
-                  </div>
-                )}
+                <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[11px] font-mono text-white flex items-center space-x-1 border border-white/10 shadow-md">
+                  <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
+                  <span>{formatDuration(videoInfo.duration)}</span>
+                </div>
               </div>
 
               <div className="space-y-2 flex-1 min-w-0">

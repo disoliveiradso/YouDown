@@ -14,39 +14,64 @@ function extractVideoId(url: string): string | null {
 
 async function fetchYouTubeDuration(videoId: string): Promise<number> {
   if (!videoId) return 0;
+  
+  // Strategy 1: YouTube Embed Page (Always allowed on cloud IPs & contains lengthSeconds)
   try {
-    const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+    const res = await fetch(`https://www.youtube.com/embed/${videoId}`, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
       },
       signal: AbortSignal.timeout(5000)
     });
     if (res.ok) {
       const html = await res.text();
-      // 1. "lengthSeconds":"4952"
+      // Match "lengthSeconds":"4952" inside ytInitialPlayerResponse
       const matchLength = html.match(/"lengthSeconds":"(\d+)"/);
       if (matchLength && matchLength[1]) {
         const secs = parseInt(matchLength[1], 10);
         if (secs > 0) return secs;
       }
-      // 2. "approxDurationMs":"4952000"
+      // Match "approxDurationMs":"4952000"
       const matchMs = html.match(/"approxDurationMs":"(\d+)"/);
       if (matchMs && matchMs[1]) {
         const secs = Math.floor(parseInt(matchMs[1], 10) / 1000);
         if (secs > 0) return secs;
       }
-      // 3. <meta itemprop="duration" content="PT1H22M32S">
-      const matchMeta = html.match(/itemprop="duration"\s+content="PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"/i);
-      if (matchMeta) {
-        const h = parseInt(matchMeta[1] || '0', 10);
-        const m = parseInt(matchMeta[2] || '0', 10);
-        const s = parseInt(matchMeta[3] || '0', 10);
-        const totalSecs = h * 3600 + m * 60 + s;
-        if (totalSecs > 0) return totalSecs;
+    }
+  } catch {}
+
+  // Strategy 2: Piped API Streams Endpoint
+  try {
+    const pipedRes = await fetch(`https://pipedapi.kavin.rocks/streams/${videoId}`, {
+      signal: AbortSignal.timeout(4000)
+    });
+    if (pipedRes.ok) {
+      const data = await pipedRes.json();
+      if (data.duration && Number(data.duration) > 0) {
+        return Number(data.duration);
       }
     }
   } catch {}
+
+  // Strategy 3: Invidious API
+  const invidiousEndpoints = [
+    `https://inv.itissimple.org/api/v1/videos/${videoId}`,
+    `https://invidious.nerdvpn.de/api/v1/videos/${videoId}`,
+    `https://yewtu.be/api/v1/videos/${videoId}`
+  ];
+  for (const ep of invidiousEndpoints) {
+    try {
+      const invRes = await fetch(ep, { signal: AbortSignal.timeout(3000) });
+      if (invRes.ok) {
+        const data = await invRes.json();
+        if (data.lengthSeconds && Number(data.lengthSeconds) > 0) {
+          return Number(data.lengthSeconds);
+        }
+      }
+    } catch {}
+  }
+
   return 0;
 }
 
@@ -127,7 +152,7 @@ export async function POST(request: Request) {
       videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
 
       let duration = info.duration || info.duration_string || 0;
-      if (!duration && videoId) {
+      if ((!duration || duration === 0) && videoId) {
         duration = await fetchYouTubeDuration(videoId);
       }
 
@@ -146,7 +171,7 @@ export async function POST(request: Request) {
       // Fallback to Invidious/Piped/oEmbed
       const fallbackData = await fallbackMetadata(url);
       if (fallbackData) {
-        if (!fallbackData.duration && videoId) {
+        if ((!fallbackData.duration || fallbackData.duration === 0) && videoId) {
           fallbackData.duration = await fetchYouTubeDuration(videoId);
         }
         return NextResponse.json(fallbackData);
