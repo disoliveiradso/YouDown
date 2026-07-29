@@ -31,7 +31,8 @@ export async function GET(request: Request) {
     '-f', formatSelector,
     '--no-warnings',
     '--no-check-certificates',
-    '--socket-timeout', '30'
+    '--socket-timeout', '30',
+    '--extractor-args', 'youtube:player_client=tv_embedded,mweb'
   ];
 
   if (type === 'audio') {

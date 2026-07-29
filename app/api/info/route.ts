@@ -340,6 +340,7 @@ export async function POST(request: Request) {
         '--no-warnings',
         '--socket-timeout', '15',
         '--no-check-certificates',
+        '--extractor-args', 'youtube:player_client=tv_embedded,mweb',
         url
       ], { maxBuffer: 15 * 1024 * 1024 });
 
@@ -457,7 +458,7 @@ export async function POST(request: Request) {
                     quality: `${abr} kbps (MP3)`,
                     ext: 'mp3',
                     filesize: parseInt(fmt.contentLength || '0'),
-                    url: fmt.container || 'mp3',
+                    url: fmt.url || ''
                   });
                 }
               }
