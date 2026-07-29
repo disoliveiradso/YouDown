@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import ytdl from '@distube/ytdl-core';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -351,7 +352,71 @@ export async function POST(request: Request) {
     } catch (ytErr) {
       // 4-Tier Fallback Sequence
       if (videoId) {
-        // Fallback 1: YouTube Embed HTML with bracket JSON parser
+        // Fallback 1: ytdl-core (Native Node.js extraction for true formats and duration)
+        try {
+          const ytdlInfo = await ytdl.getInfo(url);
+          if (ytdlInfo && ytdlInfo.formats.length > 0) {
+            const videoFormats: any[] = [];
+            const audioFormats: any[] = [];
+            const seenH = new Set();
+            const seenA = new Set();
+            
+            for (const fmt of ytdlInfo.formats) {
+              const h = fmt.height;
+              if (h && h >= 144 && !seenH.has(h)) {
+                seenH.add(h);
+                let q = fmt.qualityLabel || `${h}p`;
+                if (h >= 2160) q += ' (4K Ultra HD)';
+                else if (h >= 1440) q += ' (2K Quad HD)';
+                else if (h >= 1080) q += ' HD';
+
+                videoFormats.push({
+                  format_id: `yt-${h}`,
+                  quality: q,
+                  height: h,
+                  ext: fmt.container || 'mp4',
+                  filesize: parseInt(fmt.contentLength || '0'),
+                  has_audio: fmt.hasAudio,
+                  url: fmt.url || ''
+                });
+              }
+
+              if (fmt.hasAudio && !fmt.hasVideo) {
+                const abr = fmt.audioBitrate || 128;
+                if (!seenA.has(abr)) {
+                  seenA.add(abr);
+                  audioFormats.push({
+                    format_id: `audio-${abr}`,
+                    quality: `${abr} kbps (MP3)`,
+                    ext: 'mp3',
+                    filesize: parseInt(fmt.contentLength || '0'),
+                    url: fmt.url || ''
+                  });
+                }
+              }
+            }
+
+            videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
+            audioFormats.sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
+
+            let dur = parseInt(ytdlInfo.videoDetails.lengthSeconds) || 0;
+            if (!dur && embedMetadata?.duration) dur = embedMetadata.duration;
+
+            return NextResponse.json({
+              title: ytdlInfo.videoDetails.title || embedMetadata?.title || 'Vídeo do YouTube',
+              thumbnail: ytdlInfo.videoDetails.thumbnails?.slice(-1)[0]?.url || embedMetadata?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+              duration: dur,
+              uploader: ytdlInfo.videoDetails.author.name || embedMetadata?.uploader || 'YouTube',
+              views: parseInt(ytdlInfo.videoDetails.viewCount) || embedMetadata?.views || 0,
+              video_formats: videoFormats,
+              audio_formats: audioFormats,
+              subtitles: [],
+              original_url: url
+            });
+          }
+        } catch(e) {}
+
+        // Fallback 2: YouTube Embed HTML with bracket JSON parser
         if (embedMetadata && embedMetadata.video_formats && embedMetadata.video_formats.length > 0) {
           return NextResponse.json(embedMetadata);
         }
