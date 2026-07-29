@@ -47,7 +47,7 @@ function parsePlayerResponse(html: string): any {
           const jsonStr = html.substring(startIdx, i + 1);
           try {
             return JSON.parse(jsonStr);
-          } catch {}
+          } catch { }
           break;
         }
       }
@@ -114,7 +114,7 @@ async function fetchYouTubeEmbedInfo(videoId: string, originalUrl: string) {
             if (bitrateKbps > 0 && !seenBitrates.has(bitrateKbps)) {
               seenBitrates.add(bitrateKbps);
               const ext = mime.includes('mp4') || mime.includes('m4a') ? 'm4a' : 'mp3';
-              
+
               let qualityText = `${bitrateKbps} kbps`;
               if (bitrateKbps >= 256) qualityText += ' (Alta Qualidade)';
               else if (bitrateKbps >= 128) qualityText += ' (Padrão)';
@@ -133,7 +133,18 @@ async function fetchYouTubeEmbedInfo(videoId: string, originalUrl: string) {
         videoFormats.sort((a, b) => b.height - a.height);
         audioFormats.sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
 
-        const durationSecs = videoDetails.lengthSeconds ? parseInt(videoDetails.lengthSeconds, 10) : 0;
+        let durationSecs = videoDetails.lengthSeconds ? parseInt(videoDetails.lengthSeconds, 10) : 0;
+        
+        // NATIVE JS DURATION EXTRACTION: Se o JSON não tiver, buscamos no HTML nativo!
+        if (!durationSecs || durationSecs === 0) {
+          const matchMeta = html.match(/<meta itemprop="duration" content="PT(\d+M)?(\d+S)?"/);
+          if (matchMeta) {
+            let mins = 0, secs = 0;
+            if (matchMeta[1]) mins = parseInt(matchMeta[1].replace('M', ''));
+            if (matchMeta[2]) secs = parseInt(matchMeta[2].replace('S', ''));
+            durationSecs = (mins * 60) + secs;
+          }
+        }
 
         if (videoFormats.length > 0) {
           return {
@@ -150,53 +161,10 @@ async function fetchYouTubeEmbedInfo(videoId: string, originalUrl: string) {
         }
       }
     }
-  } catch {}
+  } catch { }
   return null;
 }
 
-// Fetch Official YouTube oEmbed API as guaranteed fallback
-async function fetchOembedInfo(videoId: string, originalUrl: string) {
-  try {
-    const res = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(5000)
-    });
-    if (res.ok) {
-      const data = await res.json();
-
-      let duration = 0;
-      try {
-        const embedRes = await fetch(`https://www.youtube.com/embed/${videoId}`, { signal: AbortSignal.timeout(3000) });
-        if (embedRes.ok) {
-          const html = await embedRes.text();
-          const matchSecs = html.match(/"lengthSeconds":"(\d+)"/);
-          if (matchSecs && matchSecs[1]) duration = parseInt(matchSecs[1], 10);
-        }
-      } catch {}
-
-      return {
-        title: data.title || 'Vídeo do YouTube',
-        thumbnail: data.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        duration: duration,
-        uploader: data.author_name || 'Canal do YouTube',
-        views: 0,
-        video_formats: [
-          { format_id: 'yt-1080', quality: '1080p HD', height: 1080, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
-          { format_id: 'yt-720', quality: '720p', height: 720, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
-          { format_id: 'yt-480', quality: '480p', height: 480, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
-          { format_id: 'yt-360', quality: '360p', height: 360, ext: 'mp4', filesize: 0, has_audio: true, url: '' },
-        ],
-        audio_formats: [
-          { format_id: 'audio-192', quality: '192 kbps (MP3)', ext: 'mp3', filesize: 0, url: '' },
-          { format_id: 'audio-128', quality: '128 kbps (MP3)', ext: 'mp3', filesize: 0, url: '' },
-        ],
-        subtitles: [],
-        original_url: originalUrl
-      };
-    }
-  } catch {}
-  return null;
-}
 
 // Fetch Piped API metadata
 async function fetchPipedInfo(videoId: string, originalUrl: string) {
@@ -268,7 +236,7 @@ async function fetchPipedInfo(videoId: string, originalUrl: string) {
           };
         }
       }
-    } catch {}
+    } catch { }
   }
   return null;
 }
@@ -289,9 +257,9 @@ export async function POST(request: Request) {
       const { stdout } = await execFileAsync('yt-dlp', [
         '-j',
         '--no-warnings',
-        '--socket-timeout', '10',
+        '--socket-timeout', '15',
         '--no-check-certificates',
-        '--extractor-args', 'youtube:player_client=ios,mweb',
+        '--extractor-args', 'youtube:player_client=default,ios',
         url
       ], { maxBuffer: 15 * 1024 * 1024 });
 
@@ -377,31 +345,23 @@ export async function POST(request: Request) {
           return NextResponse.json(embedData);
         }
 
-        // Fallback 2: Piped API
         const pipedData = await fetchPipedInfo(videoId, url);
         if (pipedData && pipedData.video_formats.length > 0) {
           return NextResponse.json(pipedData);
         }
 
-        // Fallback 3: Invidious API
         const invData = await fetchInvidiousInfo(videoId, url);
         if (invData && invData.video_formats.length > 0) {
           return NextResponse.json(invData);
         }
-
-        // Fallback 4: Official YouTube oEmbed API (Guaranteed 100% uptime)
-        const oembedData = await fetchOembedInfo(videoId, url);
-        if (oembedData) {
-          return NextResponse.json(oembedData);
-        }
       }
 
       return NextResponse.json({
-        error: 'Erro ao conectar com o serviço do YouTube. Por favor, tente novamente.'
+        error: 'Erro ao conectar com o YouTube. Nenhum formato válido (4K/1080p) foi encontrado pelo sistema nativo. Tente novamente.'
       }, { status: 400 });
     }
   } catch (err: any) {
-    return NextResponse.json({ error: 'Erro no servidor. Tente novamente.' }, { status: 400 });
+    return NextResponse.json({ error: 'Erro no servidor. Tente novamente.' }, { status: 500 });
   }
 }
 
@@ -475,7 +435,7 @@ async function fetchInvidiousInfo(videoId: string, originalUrl: string) {
           };
         }
       }
-    } catch {}
+    } catch { }
   }
 
   return null;
