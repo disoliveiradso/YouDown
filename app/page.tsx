@@ -1,27 +1,20 @@
-'use client';
-
 import React, { useState } from 'react';
 import { 
   Download, 
-  Search, 
-  Video, 
-  Music, 
-  CheckCircle2, 
-  AlertCircle, 
-  Loader2, 
   Sparkles, 
-  Clock, 
-  Eye, 
-  FileText, 
-  Layers, 
-  ArrowRight,
-  ShieldCheck,
-  Github,
-  Check,
-  X,
-  Info,
+  Music, 
+  Check, 
+  AlertCircle, 
+  CheckCircle2, 
+  Info, 
+  ShieldAlert, 
+  ShieldCheck, 
+  Github, 
   ExternalLink,
-  ShieldAlert
+  FileText,
+  Layers,
+  Clock,
+  Loader2
 } from 'lucide-react';
 
 interface FormatOption {
@@ -29,15 +22,15 @@ interface FormatOption {
   quality: string;
   height?: number;
   ext: string;
-  filesize?: number;
-  has_audio?: boolean;
+  filesize: number;
+  has_audio: boolean;
   url?: string;
 }
 
 interface VideoInfo {
   title: string;
   thumbnail: string;
-  duration: number;
+  duration: number | string;
   uploader: string;
   views: number;
   video_formats: FormatOption[];
@@ -87,8 +80,11 @@ export default function Home() {
     setPopups((prev) => prev.filter((p) => p.id !== id));
   };
 
-  const formatDuration = (seconds: number) => {
-    if (!seconds) return '00:00';
+  const formatDuration = (val: number | string) => {
+    if (!val) return '';
+    if (typeof val === 'string' && val.includes(':')) return val;
+    const seconds = typeof val === 'string' ? parseFloat(val) : val;
+    if (isNaN(seconds) || seconds <= 0) return '';
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
@@ -98,24 +94,23 @@ export default function Home() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes || bytes === 0) return 'Tamanho dinâmico';
-    const mb = bytes / (1024 * 1024);
-    if (mb > 1024) {
-      return `${(mb / 1024).toFixed(1)} GB`;
-    }
-    return `${mb.toFixed(1)} MB`;
-  };
-
   const handleFetchInfo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim()) return;
+    if (!url.trim()) {
+      addPopup({
+        type: 'warning',
+        title: 'URL Necessária',
+        description: 'Por favor, insira o link de um vídeo do YouTube válido.',
+        position: 'toast'
+      });
+      return;
+    }
 
     setLoading(true);
     setVideoInfo(null);
     setSelectedFormat(null);
 
-    // Toast de aviso de responsabilidade do usuário
+    // Disclaimer popup on search start
     addPopup({
       type: 'info',
       title: 'Aviso de Responsabilidade',
@@ -182,18 +177,18 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok || data.error) {
-        throw new Error(data.error || 'Falha ao processar download');
+        throw new Error(data.error || 'Não foi possível gerar o link de download.');
       }
 
       if (data.download_url) {
-        const link = document.createElement('a');
-        link.href = data.download_url;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.setAttribute('download', data.filename || 'media');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        // Trigger browser download via direct link
+        const a = document.createElement('a');
+        a.href = data.download_url;
+        a.target = '_blank';
+        a.download = data.filename || 'download';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
 
         addPopup({
           type: 'success',
@@ -249,21 +244,21 @@ export default function Home() {
               onClick={() => removePopup(popup.id)}
               className="text-slate-400 hover:text-white p-1 rounded-md transition-colors"
             >
-              <X className="w-4 h-4" />
+              ×
             </button>
           </div>
         ))}
       </div>
 
-      {/* Terms & Privacy Modal */}
+      {/* Interactive Modal for Terms & Privacy */}
       {activeModal && (
-        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card max-w-xl w-full rounded-2xl p-6 sm:p-8 space-y-6 border border-white/10 shadow-2xl relative animate-fadeIn">
+        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl max-w-lg w-full p-6 sm:p-8 space-y-5 shadow-2xl relative">
             <button
               onClick={() => setActiveModal(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-all"
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg transition-colors text-lg"
             >
-              <X className="w-5 h-5" />
+              ✕
             </button>
 
             {activeModal === 'terms' ? (
@@ -350,49 +345,46 @@ export default function Home() {
               sem complicações
             </span>
           </h1>
-          <p className="text-slate-400 text-xs sm:text-base max-w-xl mx-auto leading-relaxed text-pretty">
-            Cole a URL do vídeo do YouTube e escolha a qualidade desejada (4K, 1080p, MP3, M4A).
+          <p className="text-slate-400 text-xs sm:text-base max-w-lg mx-auto leading-relaxed text-balance">
+            Cole a URL do vídeo do YouTube e escolha a qualidade desejada <span className="inline-block whitespace-nowrap">(4K, 1080p, MP3, M4A).</span>
           </p>
         </div>
 
-        {/* Input Form */}
-        <form onSubmit={handleFetchInfo} className="mb-8">
-          <div className="relative glass-effect rounded-2xl p-2 shadow-2xl glow-purple focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <div className="flex items-center flex-1 pl-2 sm:pl-4">
-                <Search className="w-5 h-5 text-slate-400 shrink-0" />
-                <input
-                  type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="Cole o link do vídeo ou playlist aqui..."
-                  required
-                  className="w-full bg-transparent border-0 py-3 px-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-0 text-xs sm:text-base"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loading || !url.trim()}
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold px-6 py-3.5 rounded-xl text-sm flex items-center justify-center space-x-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                    <span>Buscando...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Buscar</span>
-                    <ArrowRight className="w-4 h-4 shrink-0" />
-                  </>
-                )}
-              </button>
+        {/* Input & Search Form */}
+        <form onSubmit={handleFetchInfo} className="mb-6 sm:mb-8">
+          <div className="relative glass-card rounded-2xl p-2 flex flex-col sm:flex-row items-center gap-2 border border-white/10 shadow-2xl focus-within:border-indigo-500/50 transition-all">
+            <div className="relative flex-1 w-full flex items-center">
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="Cole o link do YouTube aqui (ex: https://youtube.com/watch?v=...)"
+                className="w-full bg-transparent px-4 py-3 sm:py-4 text-sm sm:text-base text-white placeholder-slate-500 focus:outline-none"
+                disabled={loading}
+              />
             </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold px-6 py-3.5 sm:py-4 rounded-xl text-sm sm:text-base flex items-center justify-center space-x-2 transition-all shadow-lg shadow-indigo-500/25 shrink-0 disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Buscando...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-5 h-5" />
+                  <span>Buscar Mídia</span>
+                </>
+              )}
+            </button>
           </div>
         </form>
 
-        {/* Additional Features Bar */}
-        <div className="glass-card rounded-xl p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs sm:text-sm text-slate-300">
+        {/* Options & Features Bar */}
+        <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs sm:text-sm text-slate-300 mb-8 sm:mb-10 px-2">
           <label className="flex items-center space-x-3 cursor-pointer group">
             <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all shrink-0 ${
               audioOnly 
@@ -468,10 +460,12 @@ export default function Home() {
                   alt={videoInfo.title}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[11px] font-mono text-white flex items-center space-x-1">
-                  <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
-                  <span>{formatDuration(videoInfo.duration)}</span>
-                </div>
+                {formatDuration(videoInfo.duration) && (
+                  <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[11px] font-mono text-white flex items-center space-x-1">
+                    <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
+                    <span>{formatDuration(videoInfo.duration)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2 flex-1 min-w-0">
@@ -479,98 +473,113 @@ export default function Home() {
                   {videoInfo.title}
                 </h2>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                  <span className="font-medium text-slate-300">Canal: {videoInfo.uploader}</span>
-                  {videoInfo.views > 0 && (
-                    <span className="flex items-center space-x-1 whitespace-nowrap">
-                      <Eye className="w-3.5 h-3.5 shrink-0" />
-                      <span>{videoInfo.views.toLocaleString()} visualizações</span>
-                    </span>
-                  )}
+                  <span>Canal: <strong className="text-slate-200">{videoInfo.uploader}</strong></span>
                 </div>
               </div>
             </div>
 
-            {/* Format Selection Tabs */}
+            {/* Quality / Format Tabs */}
             <div className="space-y-4">
-              <div className="flex items-center space-x-2 border-b border-white/10 pb-3">
+              <div className="flex border-b border-white/10 gap-6">
                 <button
-                  type="button"
                   onClick={() => {
                     setTab('video');
                     if (videoInfo.video_formats?.length > 0) setSelectedFormat(videoInfo.video_formats[0]);
                   }}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                  className={`pb-3 text-sm font-semibold flex items-center space-x-2 border-b-2 transition-all ${
                     tab === 'video'
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                      ? 'border-indigo-500 text-indigo-400'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <Video className="w-4 h-4 shrink-0" />
+                  <Download className="w-4 h-4" />
                   <span>Vídeo com Som</span>
                 </button>
-
                 <button
-                  type="button"
                   onClick={() => {
                     setTab('audio');
                     if (videoInfo.audio_formats?.length > 0) setSelectedFormat(videoInfo.audio_formats[0]);
                   }}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                  className={`pb-3 text-sm font-semibold flex items-center space-x-2 border-b-2 transition-all ${
                     tab === 'audio'
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                      ? 'border-indigo-500 text-indigo-400'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <Music className="w-4 h-4 shrink-0" />
+                  <Music className="w-4 h-4" />
                   <span>Áudio Apenas</span>
                 </button>
               </div>
 
-              {/* Resolution / Bitrate List */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {(tab === 'video' ? videoInfo.video_formats : videoInfo.audio_formats)?.map((opt, idx) => {
-                  const isSelected = selectedFormat?.format_id === opt.format_id;
-                  return (
+              {/* Format Select Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                {tab === 'video' ? (
+                  videoInfo.video_formats.map((fmt) => (
                     <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setSelectedFormat(opt)}
-                      className={`flex items-center justify-between p-3.5 rounded-xl border text-left transition-all ${
-                        isSelected
-                          ? 'border-indigo-500 bg-indigo-500/10 text-white ring-1 ring-indigo-500'
-                          : 'border-white/5 bg-slate-900/40 text-slate-300 hover:bg-slate-800/60 hover:border-white/10'
+                      key={fmt.format_id}
+                      onClick={() => setSelectedFormat(fmt)}
+                      className={`p-4 rounded-xl border text-left flex items-center justify-between transition-all ${
+                        selectedFormat?.format_id === fmt.format_id
+                          ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
+                          : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20'
                       }`}
                     >
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                          isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
-                        }`}>
-                          {opt.ext.toUpperCase()}
+                      <div className="space-y-1">
+                        <div className="font-bold flex items-center space-x-2">
+                          <span className="uppercase text-xs font-mono bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded">
+                            {fmt.ext}
+                          </span>
+                          <span>{fmt.quality}</span>
                         </div>
-                        <div>
-                          <div className="text-sm font-bold text-white flex items-center space-x-2">
-                            <span className="whitespace-nowrap">{opt.quality}</span>
-                            {opt.height && opt.height >= 1080 && (
-                              <span className="text-[10px] bg-gradient-to-r from-amber-500 to-orange-500 text-black px-1.5 py-0.2 font-extrabold rounded">
-                                HD
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs text-slate-400 whitespace-nowrap">{formatFileSize(opt.filesize)}</span>
-                        </div>
+                        <p className="text-xs text-slate-400">
+                          Tamanho dinâmico
+                        </p>
                       </div>
-
-                      {isSelected && <CheckCircle2 className="w-5 h-5 text-indigo-400 shrink-0" />}
+                      <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                        selectedFormat?.format_id === fmt.format_id
+                          ? 'border-indigo-400 bg-indigo-500 text-white'
+                          : 'border-slate-600'
+                      }`}>
+                        {selectedFormat?.format_id === fmt.format_id && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
                     </button>
-                  );
-                })}
+                  ))
+                ) : (
+                  videoInfo.audio_formats.map((fmt) => (
+                    <button
+                      key={fmt.format_id}
+                      onClick={() => setSelectedFormat(fmt)}
+                      className={`p-4 rounded-xl border text-left flex items-center justify-between transition-all ${
+                        selectedFormat?.format_id === fmt.format_id
+                          ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
+                          : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="font-bold flex items-center space-x-2">
+                          <span className="uppercase text-xs font-mono bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded">
+                            {fmt.ext}
+                          </span>
+                          <span>{fmt.quality}</span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          Áudio de Alta Qualidade
+                        </p>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                        selectedFormat?.format_id === fmt.format_id
+                          ? 'border-indigo-400 bg-indigo-500 text-white'
+                          : 'border-slate-600'
+                      }`}>
+                        {selectedFormat?.format_id === fmt.format_id && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
-            </div>
 
-            {/* Download Action Button */}
-            <div className="pt-4 border-t border-white/10">
+              {/* Download CTA Button */}
               <button
-                type="button"
                 onClick={handleDownload}
                 disabled={downloading || !selectedFormat}
                 className="w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold py-4 rounded-xl text-sm sm:text-base flex items-center justify-center space-x-3 shadow-xl shadow-indigo-600/30 transition-all disabled:opacity-50 active:scale-[0.99]"
@@ -594,14 +603,15 @@ export default function Home() {
 
       {/* Responsive Footer */}
       <footer className="border-t border-white/5 py-6 sm:py-8 bg-[#090d16]/90 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          {/* GitHub Buttons */}
-          <div className="flex flex-wrap items-center justify-center gap-3">
+        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-slate-400">
+          {/* GitHub Used Repositories */}
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
             <a
               href="https://github.com/disoliveiradso/YouDown"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-2 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              title="Repositório Oficial do YouDown"
             >
               <Github className="w-4 h-4 text-white shrink-0" />
               <span>Repositório do Site</span>
@@ -612,16 +622,41 @@ export default function Home() {
               href="https://github.com/yt-dlp/yt-dlp"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-2 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              title="Motor Principal de Extração"
             >
               <Github className="w-4 h-4 text-indigo-400 shrink-0" />
-              <span>Projeto yt-dlp</span>
+              <span>yt-dlp</span>
+              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
+            </a>
+
+            <a
+              href="https://github.com/Brainicism/bgutil-ytdlp-pot-provider"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              title="Provedor de PO-Token Antibot"
+            >
+              <Github className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>bgutil-ytdlp-pot</span>
+              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
+            </a>
+
+            <a
+              href="https://github.com/iv-org/invidious"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              title="API Fallback Secundária"
+            >
+              <Github className="w-4 h-4 text-pink-400 shrink-0" />
+              <span>Invidious API</span>
               <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
             </a>
           </div>
 
           {/* Legal Links */}
-          <div className="flex items-center space-x-5 text-slate-300 whitespace-nowrap">
+          <div className="flex items-center space-x-5 text-slate-300 whitespace-nowrap shrink-0">
             <button
               onClick={() => setActiveModal('terms')}
               className="hover:text-indigo-400 transition-colors"
