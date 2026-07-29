@@ -100,7 +100,6 @@ class handler(BaseHTTPRequestHandler):
                     if vcodec != 'none':
                         height = f.get('height')
                         format_id = f.get('format_id')
-                        format_note = f.get('format_note', '')
                         fps = f.get('fps', '')
                         
                         if height and height not in seen_resolutions:
@@ -151,8 +150,15 @@ class handler(BaseHTTPRequestHandler):
                 }
 
                 self._respond_json(response_data)
+                return
 
         except Exception as e:
+            # Fallback to Piped API if yt-dlp fails (e.g. YouTube Bot Block)
+            fallback_data = self._fallback_piped(url)
+            if fallback_data:
+                self._respond_json(fallback_data)
+                return
+
             error_msg = str(e)
             if 'Private video' in error_msg:
                 user_msg = 'Este vídeo é privado.'
@@ -164,6 +170,84 @@ class handler(BaseHTTPRequestHandler):
                 user_msg = f'Não foi possível obter informações do vídeo: {error_msg}'
 
             self._respond_json({'error': user_msg}, status=400)
+
+    def _fallback_piped(self, url):
+        import re
+        import urllib.request
+
+        # Extract YouTube Video ID
+        match = re.search(r'(?:v=|\/([0-9A-Za-z_-]{11}).*|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})', url)
+        if not match:
+            return None
+        
+        video_id = match.group(1) or match.group(2)
+        if not video_id:
+            return None
+
+        endpoints = [
+            f"https://pipedapi.kavin.rocks/streams/{video_id}",
+            f"https://api.piped.video/streams/{video_id}",
+            f"https://pipedapi.mha.fi/streams/{video_id}"
+        ]
+
+        for ep in endpoints:
+            try:
+                req = urllib.request.Request(ep, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode('utf-8'))
+                        
+                        video_formats = []
+                        audio_formats = []
+                        seen_resolutions = set()
+                        seen_audio = set()
+
+                        # Process Video Streams
+                        for vs in data.get('videoStreams', []):
+                            height = vs.get('height')
+                            quality_label = vs.get('quality') or (f"{height}p" if height else None)
+                            if height and height not in seen_resolutions:
+                                seen_resolutions.add(height)
+                                video_formats.append({
+                                    'format_id': f"piped-v-{height}",
+                                    'quality': quality_label,
+                                    'height': height,
+                                    'ext': 'mp4',
+                                    'filesize': vs.get('bitrate', 0),
+                                    'has_audio': vs.get('videoOnly') is not True,
+                                    'url': vs.get('url')
+                                })
+
+                        # Process Audio Streams
+                        for idx, as_stream in enumerate(data.get('audioStreams', [])):
+                            quality = as_stream.get('quality') or '128 kbps'
+                            key = f"{as_stream.get('format', 'mp3')}-{quality}"
+                            if key not in seen_audio:
+                                seen_audio.add(key)
+                                audio_formats.append({
+                                    'format_id': f"piped-a-{idx}",
+                                    'quality': str(quality),
+                                    'ext': 'mp3',
+                                    'filesize': as_stream.get('bitrate', 0),
+                                    'url': as_stream.get('url')
+                                })
+
+                        video_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
+
+                        return {
+                            'title': data.get('title', 'Vídeo do YouTube'),
+                            'thumbnail': data.get('thumbnailUrl', ''),
+                            'duration': data.get('duration', 0),
+                            'uploader': data.get('uploader', 'YouTube Uploader'),
+                            'views': data.get('views', 0),
+                            'video_formats': video_formats[:6],
+                            'audio_formats': audio_formats[:4],
+                            'subtitles': [],
+                            'original_url': url
+                        }
+            except Exception:
+                continue
+        return None
 
     def _respond_json(self, data, status=200):
         self.send_response(status)

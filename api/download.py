@@ -112,9 +112,78 @@ class handler(BaseHTTPRequestHandler):
                 }
 
                 self._respond_json(response_data)
+                return
 
         except Exception as e:
+            # Fallback to Piped API if yt-dlp fails
+            fallback_res = self._fallback_piped_download(url, download_type)
+            if fallback_res:
+                self._respond_json(fallback_res)
+                return
+
             self._respond_json({'error': f'Falha ao gerar link de download: {str(e)}'}, status=500)
+
+    def _fallback_piped_download(self, url, download_type):
+        import re
+        import urllib.request
+
+        match = re.search(r'(?:v=|\/([0-9A-Za-z_-]{11}).*|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})', url)
+        if not match:
+            return None
+        
+        video_id = match.group(1) or match.group(2)
+        if not video_id:
+            return None
+
+        endpoints = [
+            f"https://pipedapi.kavin.rocks/streams/{video_id}",
+            f"https://api.piped.video/streams/{video_id}",
+            f"https://pipedapi.mha.fi/streams/{video_id}"
+        ]
+
+        for ep in endpoints:
+            try:
+                req = urllib.request.Request(ep, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode('utf-8'))
+                        title = data.get('title', 'video')
+                        clean_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
+
+                        if download_type == 'audio':
+                            audio_streams = data.get('audioStreams', [])
+                            if audio_streams:
+                                stream_url = audio_streams[0].get('url')
+                                ext = 'mp3'
+                                return {
+                                    'download_url': stream_url,
+                                    'title': clean_title,
+                                    'filename': f"{clean_title}.{ext}",
+                                    'ext': ext
+                                }
+                        else:
+                            video_streams = data.get('videoStreams', [])
+                            if video_streams:
+                                # Find stream with audio or highest resolution
+                                best_stream = None
+                                for vs in video_streams:
+                                    if vs.get('videoOnly') is not True:
+                                        best_stream = vs
+                                        break
+                                if not best_stream:
+                                    best_stream = video_streams[0]
+                                
+                                stream_url = best_stream.get('url')
+                                ext = 'mp4'
+                                return {
+                                    'download_url': stream_url,
+                                    'title': clean_title,
+                                    'filename': f"{clean_title}.{ext}",
+                                    'ext': ext
+                                }
+            except Exception:
+                continue
+        return None
 
     def _respond_json(self, data, status=200):
         self.send_response(status)
