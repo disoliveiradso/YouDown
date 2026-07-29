@@ -607,53 +607,63 @@ export default function Home() {
       <footer className="border-t border-white/5 py-6 sm:py-8 bg-[#090d16]/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-slate-400">
           {/* GitHub Used Repositories */}
-          <div className="flex flex-wrap items-center justify-center gap-2.5">
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {/* Repositório Oficial do Site */}
             <a
               href="https://github.com/disoliveiradso/YouDown"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-1.5 rounded-xl text-slate-200 transition-all whitespace-nowrap shadow-sm"
               title="Repositório Oficial do YouDown"
             >
               <Github className="w-4 h-4 text-white shrink-0" />
-              <span>Repositório do Site</span>
+              <span className="font-semibold">Repositório do Site</span>
               <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
             </a>
 
+            {/* Separador Barrinha */}
+            <span className="text-slate-600 font-light select-none hidden sm:inline text-sm">|</span>
+
+            {/* Texto discreto com menos destaque */}
+            <span className="text-[11px] text-slate-500 font-medium tracking-wide uppercase whitespace-nowrap">
+              Tecnologias utilizadas no site:
+            </span>
+
+            {/* 3 Repositórios Utilizados */}
             <a
               href="https://github.com/yt-dlp/yt-dlp"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              className="flex items-center space-x-1.5 bg-white/5 hover:bg-white/10 border border-white/10 px-2.5 py-1.5 rounded-xl text-slate-300 transition-all text-xs whitespace-nowrap"
               title="Motor Principal de Extração"
             >
-              <Github className="w-4 h-4 text-indigo-400 shrink-0" />
+              <Github className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
               <span>yt-dlp</span>
-              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
+              <ExternalLink className="w-3 h-3 text-slate-500 shrink-0" />
             </a>
 
             <a
               href="https://github.com/Brainicism/bgutil-ytdlp-pot-provider"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              className="flex items-center space-x-1.5 bg-white/5 hover:bg-white/10 border border-white/10 px-2.5 py-1.5 rounded-xl text-slate-300 transition-all text-xs whitespace-nowrap"
               title="Provedor de PO-Token Antibot"
             >
-              <Github className="w-4 h-4 text-purple-400 shrink-0" />
+              <Github className="w-3.5 h-3.5 text-purple-400 shrink-0" />
               <span>bgutil-ytdlp-pot</span>
-              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
+              <ExternalLink className="w-3 h-3 text-slate-500 shrink-0" />
             </a>
 
             <a
               href="https://github.com/iv-org/invidious"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-xl text-slate-200 transition-all whitespace-nowrap"
+              className="flex items-center space-x-1.5 bg-white/5 hover:bg-white/10 border border-white/10 px-2.5 py-1.5 rounded-xl text-slate-300 transition-all text-xs whitespace-nowrap"
               title="API Fallback Secundária"
             >
-              <Github className="w-4 h-4 text-pink-400 shrink-0" />
+              <Github className="w-3.5 h-3.5 text-pink-400 shrink-0" />
               <span>Invidious API</span>
-              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
+              <ExternalLink className="w-3 h-3 text-slate-500 shrink-0" />
             </a>
           </div>
 
