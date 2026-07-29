@@ -153,7 +153,7 @@ class handler(BaseHTTPRequestHandler):
                 return
 
         except Exception as e:
-            # Fallback to Piped API if yt-dlp fails (e.g. YouTube Bot Block)
+            # Fallback to Invidious + Piped + oEmbed APIs if yt-dlp fails (e.g. YouTube Bot Block)
             fallback_data = self._fallback_piped(url)
             if fallback_data:
                 self._respond_json(fallback_data)
@@ -177,32 +177,93 @@ class handler(BaseHTTPRequestHandler):
 
         # Extract YouTube Video ID
         match = re.search(r'(?:v=|\/([0-9A-Za-z_-]{11}).*|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})', url)
-        if not match:
-            return None
+        video_id = match.group(1) or match.group(2) if match else None
         
-        video_id = match.group(1) or match.group(2)
         if not video_id:
             return None
 
-        endpoints = [
-            f"https://pipedapi.kavin.rocks/streams/{video_id}",
-            f"https://api.piped.video/streams/{video_id}",
-            f"https://pipedapi.mha.fi/streams/{video_id}"
+        # 1. Try Invidious Instances (Most reliable for serverless)
+        invidious_instances = [
+            f"https://inv.itissimple.org/api/v1/videos/{video_id}",
+            f"https://invidious.nerdvpn.de/api/v1/videos/{video_id}",
+            f"https://yewtu.be/api/v1/videos/{video_id}",
+            f"https://invidious.drgns.space/api/v1/videos/{video_id}"
         ]
 
-        for ep in endpoints:
+        for ep in invidious_instances:
             try:
                 req = urllib.request.Request(ep, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-                with urllib.request.urlopen(req, timeout=6) as resp:
+                with urllib.request.urlopen(req, timeout=5) as resp:
                     if resp.status == 200:
                         data = json.loads(resp.read().decode('utf-8'))
                         
                         video_formats = []
                         audio_formats = []
                         seen_resolutions = set()
-                        seen_audio = set()
 
-                        # Process Video Streams
+                        for fmt in data.get('formatStreams', []):
+                            q = fmt.get('qualityLabel') or f"{fmt.get('height', 720)}p"
+                            h = fmt.get('height') or 720
+                            if h not in seen_resolutions:
+                                seen_resolutions.add(h)
+                                video_formats.append({
+                                    'format_id': f"inv-{h}",
+                                    'quality': q,
+                                    'height': h,
+                                    'ext': fmt.get('container', 'mp4'),
+                                    'filesize': 0,
+                                    'has_audio': True,
+                                    'url': fmt.get('url')
+                                })
+
+                        for fmt in data.get('adaptiveFormats', []):
+                            if 'audio' in fmt.get('type', ''):
+                                audio_formats.append({
+                                    'format_id': 'inv-audio',
+                                    'quality': '128 kbps',
+                                    'ext': 'mp3',
+                                    'filesize': 0,
+                                    'url': fmt.get('url')
+                                })
+                                break
+
+                        video_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
+                        
+                        thumb = ""
+                        if data.get('videoThumbnails'):
+                            thumb = data['videoThumbnails'][0].get('url', '')
+
+                        return {
+                            'title': data.get('title', 'Vídeo do YouTube'),
+                            'thumbnail': thumb,
+                            'duration': data.get('lengthSeconds', 0),
+                            'uploader': data.get('author', 'YouTube Channel'),
+                            'views': data.get('viewCount', 0),
+                            'video_formats': video_formats[:6] if video_formats else [{'format_id': 'inv-best', 'quality': '720p', 'height': 720, 'ext': 'mp4', 'filesize': 0, 'has_audio': True, 'url': ''}],
+                            'audio_formats': audio_formats[:4] if audio_formats else [{'format_id': 'inv-audio', 'quality': '128 kbps', 'ext': 'mp3', 'filesize': 0, 'url': ''}],
+                            'subtitles': [],
+                            'original_url': url
+                        }
+            except Exception:
+                continue
+
+        # 2. Try Piped Instances
+        piped_instances = [
+            f"https://pipedapi.kavin.rocks/streams/{video_id}",
+            f"https://api.piped.video/streams/{video_id}",
+            f"https://pipedapi.adminforge.de/streams/{video_id}"
+        ]
+
+        for ep in piped_instances:
+            try:
+                req = urllib.request.Request(ep, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode('utf-8'))
+                        video_formats = []
+                        audio_formats = []
+                        seen_resolutions = set()
+
                         for vs in data.get('videoStreams', []):
                             height = vs.get('height')
                             quality_label = vs.get('quality') or (f"{height}p" if height else None)
@@ -213,24 +274,19 @@ class handler(BaseHTTPRequestHandler):
                                     'quality': quality_label,
                                     'height': height,
                                     'ext': 'mp4',
-                                    'filesize': vs.get('bitrate', 0),
+                                    'filesize': 0,
                                     'has_audio': vs.get('videoOnly') is not True,
                                     'url': vs.get('url')
                                 })
 
-                        # Process Audio Streams
                         for idx, as_stream in enumerate(data.get('audioStreams', [])):
-                            quality = as_stream.get('quality') or '128 kbps'
-                            key = f"{as_stream.get('format', 'mp3')}-{quality}"
-                            if key not in seen_audio:
-                                seen_audio.add(key)
-                                audio_formats.append({
-                                    'format_id': f"piped-a-{idx}",
-                                    'quality': str(quality),
-                                    'ext': 'mp3',
-                                    'filesize': as_stream.get('bitrate', 0),
-                                    'url': as_stream.get('url')
-                                })
+                            audio_formats.append({
+                                'format_id': f"piped-a-{idx}",
+                                'quality': str(as_stream.get('quality') or '128 kbps'),
+                                'ext': 'mp3',
+                                'filesize': 0,
+                                'url': as_stream.get('url')
+                            })
 
                         video_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
 
@@ -247,6 +303,35 @@ class handler(BaseHTTPRequestHandler):
                         }
             except Exception:
                 continue
+
+        # 3. Ultimate Fallback: YouTube oEmbed API (Guarantees Title & Thumbnail)
+        try:
+            oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+            req = urllib.request.Request(oembed_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode('utf-8'))
+                    return {
+                        'title': data.get('title', 'Vídeo do YouTube'),
+                        'thumbnail': data.get('thumbnail_url', f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"),
+                        'duration': 0,
+                        'uploader': data.get('author_name', 'YouTube'),
+                        'views': 0,
+                        'video_formats': [
+                            {'format_id': 'best', 'quality': '1080p', 'height': 1080, 'ext': 'mp4', 'filesize': 0, 'has_audio': True, 'url': ''},
+                            {'format_id': '720p', 'quality': '720p', 'height': 720, 'ext': 'mp4', 'filesize': 0, 'has_audio': True, 'url': ''},
+                            {'format_id': '480p', 'quality': '480p', 'height': 480, 'ext': 'mp4', 'filesize': 0, 'has_audio': True, 'url': ''}
+                        ],
+                        'audio_formats': [
+                            {'format_id': 'audio-best', 'quality': '320 kbps', 'ext': 'mp3', 'filesize': 0, 'url': ''},
+                            {'format_id': 'audio-mid', 'quality': '128 kbps', 'ext': 'mp3', 'filesize': 0, 'url': ''}
+                        ],
+                        'subtitles': [],
+                        'original_url': url
+                    }
+        except Exception:
+            pass
+
         return None
 
     def _respond_json(self, data, status=200):
