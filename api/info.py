@@ -2,6 +2,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 import urllib.parse
 import sys
+import os
 
 # Import yt_dlp dynamically or directly
 try:
@@ -36,6 +37,15 @@ class handler(BaseHTTPRequestHandler):
             self._respond_json({'error': 'yt-dlp não está instalado no servidor'}, status=500)
             return
 
+        cookie_file_path = None
+        if os.environ.get('YOUTUBE_COOKIES'):
+            cookie_file_path = '/tmp/youtube_cookies.txt'
+            try:
+                with open(cookie_file_path, 'w', encoding='utf-8') as f:
+                    f.write(os.environ.get('YOUTUBE_COOKIES'))
+            except Exception:
+                pass
+
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -49,6 +59,9 @@ class handler(BaseHTTPRequestHandler):
                 }
             },
         }
+        
+        if cookie_file_path:
+            ydl_opts['cookiefile'] = cookie_file_path
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
