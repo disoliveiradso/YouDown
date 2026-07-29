@@ -53,10 +53,9 @@ class handler(BaseHTTPRequestHandler):
             'skip_download': True,
             'socket_timeout': 10,
             'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios', 'mweb', 'android'],
-                    'player_skip': ['webpage', 'configs', 'js']
-                }
+                'youtube': [
+                    'client=ANDROID,IOS,TV'
+                ]
             },
         }
         

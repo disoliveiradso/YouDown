@@ -59,10 +59,9 @@ class handler(BaseHTTPRequestHandler):
             'format': format_selector,
             'skip_download': True,
             'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios', 'mweb', 'android'],
-                    'player_skip': ['webpage', 'configs', 'js']
-                }
+                'youtube': [
+                    'client=ANDROID,IOS,TV'
+                ]
             },
         }
 
